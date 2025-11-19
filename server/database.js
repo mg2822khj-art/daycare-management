@@ -147,9 +147,9 @@ export function getAllCustomers() {
   });
 }
 
-// 체크인
+// 체크인 (한국 시간 KST, UTC+9)
 export function checkIn(customer_id) {
-  const stmt = db.prepare("INSERT INTO visits (customer_id, check_in) VALUES (?, datetime('now', 'localtime'))");
+  const stmt = db.prepare("INSERT INTO visits (customer_id, check_in) VALUES (?, datetime('now', '+9 hours'))");
   stmt.bind([customer_id]);
   stmt.step();
   stmt.free();
@@ -158,12 +158,12 @@ export function checkIn(customer_id) {
   return { lastInsertRowid: result[0].values[0][0] };
 }
 
-// 체크아웃
+// 체크아웃 (한국 시간 KST, UTC+9)
 export function checkOut(visit_id) {
   const stmt = db.prepare(`
     UPDATE visits 
-    SET check_out = datetime('now', 'localtime'),
-        duration_minutes = CAST((julianday(datetime('now', 'localtime')) - julianday(check_in)) * 24 * 60 AS INTEGER)
+    SET check_out = datetime('now', '+9 hours'),
+        duration_minutes = CAST((julianday(datetime('now', '+9 hours')) - julianday(check_in)) * 24 * 60 AS INTEGER)
     WHERE id = ? AND check_out IS NULL
   `);
   stmt.bind([visit_id]);
@@ -278,16 +278,16 @@ export function getCustomerVisitHistory(customer_id) {
   });
 }
 
-// 고객 삭제 (soft delete)
+// 고객 삭제 (soft delete, 한국 시간)
 export function deleteCustomer(customer_id) {
   // 고객을 소프트 삭제
-  const stmt = db.prepare("UPDATE customers SET deleted_at = datetime('now', 'localtime') WHERE id = ?");
+  const stmt = db.prepare("UPDATE customers SET deleted_at = datetime('now', '+9 hours') WHERE id = ?");
   stmt.bind([customer_id]);
   stmt.step();
   stmt.free();
   
   // 해당 고객의 방문 기록도 소프트 삭제
-  const stmt2 = db.prepare("UPDATE visits SET deleted_at = datetime('now', 'localtime') WHERE customer_id = ?");
+  const stmt2 = db.prepare("UPDATE visits SET deleted_at = datetime('now', '+9 hours') WHERE customer_id = ?");
   stmt2.bind([customer_id]);
   stmt2.step();
   stmt2.free();
@@ -295,9 +295,9 @@ export function deleteCustomer(customer_id) {
   saveDatabase();
 }
 
-// 방문 기록 삭제 (soft delete)
+// 방문 기록 삭제 (soft delete, 한국 시간)
 export function deleteVisit(visit_id) {
-  const stmt = db.prepare("UPDATE visits SET deleted_at = datetime('now', 'localtime') WHERE id = ?");
+  const stmt = db.prepare("UPDATE visits SET deleted_at = datetime('now', '+9 hours') WHERE id = ?");
   stmt.bind([visit_id]);
   stmt.step();
   stmt.free();
