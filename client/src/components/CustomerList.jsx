@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import axios from 'axios'
+import * as XLSX from 'xlsx'
 
 const API_URL = '/api'
 
@@ -106,13 +107,82 @@ function CustomerList({ customers }) {
     return { totalVisits, totalMinutes }
   }
 
+  // 엑셀 다운로드 함수
+  const handleExportToExcel = () => {
+    if (customers.length === 0) {
+      alert('다운로드할 고객 데이터가 없습니다.')
+      return
+    }
+
+    // 엑셀 데이터 포맷팅
+    const excelData = customers.map((customer, index) => ({
+      '번호': index + 1,
+      '반려견 이름': customer.dog_name,
+      '보호자 이름': customer.customer_name,
+      '연락처': customer.phone,
+      '견종': customer.breed,
+      '나이': `${customer.age}살`,
+      '등록일': new Date(customer.created_at).toLocaleDateString('ko-KR')
+    }))
+
+    // 워크시트 생성
+    const worksheet = XLSX.utils.json_to_sheet(excelData)
+    
+    // 컬럼 너비 설정
+    worksheet['!cols'] = [
+      { wch: 8 },  // 번호
+      { wch: 15 }, // 반려견 이름
+      { wch: 12 }, // 보호자 이름
+      { wch: 15 }, // 연락처
+      { wch: 15 }, // 견종
+      { wch: 10 }, // 나이
+      { wch: 15 }  // 등록일
+    ]
+
+    // 워크북 생성
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, '고객 목록')
+
+    // 파일명 생성 (현재 날짜 포함)
+    const today = new Date()
+    const fileName = `데이케어_고객목록_${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}.xlsx`
+
+    // 파일 다운로드
+    XLSX.writeFile(workbook, fileName)
+    
+    alert(`${customers.length}명의 고객 데이터가 다운로드되었습니다.`)
+  }
+
   return (
     <div className="card">
       {!selectedCustomer ? (
         <>
-          <h2 style={{ marginBottom: '20px', color: '#333' }}>
-            등록된 고객 목록 ({filteredCustomers.length}명)
-          </h2>
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center',
+            marginBottom: '20px',
+            flexWrap: 'wrap',
+            gap: '10px'
+          }}>
+            <h2 style={{ margin: 0, color: '#333' }}>
+              등록된 고객 목록 ({filteredCustomers.length}명)
+            </h2>
+            <button
+              className="btn"
+              onClick={handleExportToExcel}
+              style={{
+                background: '#28a745',
+                color: 'white',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 20px'
+              }}
+            >
+              📊 엑셀 다운로드
+            </button>
+          </div>
 
           {/* 검색 바 */}
           <div style={{ marginBottom: '20px' }}>
