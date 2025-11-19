@@ -5,7 +5,22 @@ import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const dbPath = join(__dirname, 'daycare.db');
+
+// 환경변수에서 데이터베이스 경로 가져오기 (Render Disk 지원)
+// 프로덕션: /app/data/daycare.db (영구 저장소)
+// 개발: ./server/daycare.db (로컬)
+const dbPath = process.env.DB_PATH || join(__dirname, 'daycare.db');
+
+// 프로덕션 환경에서 데이터 디렉토리 확인 및 생성
+if (process.env.NODE_ENV === 'production' && dbPath.includes('/app/data')) {
+  const dataDir = dirname(dbPath);
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+    console.log(`📁 데이터 디렉토리 생성: ${dataDir}`);
+  }
+}
+
+console.log(`💾 데이터베이스 경로: ${dbPath}`);
 
 // SQL.js 초기화
 const SQL = await initSqlJs();
