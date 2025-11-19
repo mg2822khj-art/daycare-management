@@ -9,7 +9,7 @@ import TrashBin from './components/TrashBin'
 const API_URL = '/api' // 상대 경로 사용 (모바일 지원)
 
 function App() {
-  const [activeTab, setActiveTab] = useState('checkin')
+  const [activeTab, setActiveTab] = useState('daycare')
   const [customers, setCustomers] = useState([])
   const [currentVisits, setCurrentVisits] = useState([])
 
@@ -47,16 +47,22 @@ function App() {
   return (
     <div className="app">
       <header className="header">
-        <h1>🐕 강아지 데이케어 관리</h1>
-        <p>반려견 체크인/체크아웃 시스템</p>
+        <h1>🐕 댕스케어 호텔링/데이케어 관리</h1>
+        <p>반려견 호텔링 & 데이케어 통합 관리 시스템</p>
       </header>
 
       <div className="tabs">
         <button
-          className={`tab-button ${activeTab === 'checkin' ? 'active' : ''}`}
-          onClick={() => setActiveTab('checkin')}
+          className={`tab-button ${activeTab === 'daycare' ? 'active' : ''}`}
+          onClick={() => setActiveTab('daycare')}
         >
-          체크인/아웃
+          데이케어
+        </button>
+        <button
+          className={`tab-button ${activeTab === 'hoteling' ? 'active' : ''}`}
+          onClick={() => setActiveTab('hoteling')}
+        >
+          호텔링
         </button>
         <button
           className={`tab-button ${activeTab === 'register' ? 'active' : ''}`}
@@ -85,8 +91,17 @@ function App() {
       </div>
 
       <div className="content">
-        {activeTab === 'checkin' && (
+        {activeTab === 'daycare' && (
           <CheckInOut
+            visitType="daycare"
+            currentVisits={currentVisits}
+            onRefresh={handleRefresh}
+          />
+        )}
+
+        {activeTab === 'hoteling' && (
+          <CheckInOut
+            visitType="hoteling"
             currentVisits={currentVisits}
             onRefresh={handleRefresh}
           />
@@ -97,7 +112,7 @@ function App() {
         )}
 
         {activeTab === 'customers' && (
-          <CustomerList customers={customers} />
+          <CustomerList customers={customers} onUpdate={fetchCustomers} />
         )}
 
         {activeTab === 'history' && (

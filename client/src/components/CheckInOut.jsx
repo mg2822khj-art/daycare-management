@@ -1,9 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 
-const API_URL = '/api' // 상대 경로 사용 (모바일 지원)
+const API_URL = '/api'
 
-function CheckInOut({ currentVisits, onRefresh }) {
+function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
+  const typeLabel = visitType === 'daycare' ? '데이케어' : '호텔링'
+  const typeEmoji = visitType === 'daycare' ? '☀️' : '🌙'
+  
   const [dogName, setDogName] = useState('')
   const [searchResults, setSearchResults] = useState([])
   const [autoCompleteResults, setAutoCompleteResults] = useState([])
@@ -12,6 +15,9 @@ function CheckInOut({ currentVisits, onRefresh }) {
   const [message, setMessage] = useState({ type: '', text: '' })
   const [isLoading, setIsLoading] = useState(false)
   const autoCompleteRef = useRef(null)
+
+  // 현재 타입의 방문만 필터링
+  const filteredVisits = currentVisits.filter(visit => visit.visit_type === visitType)
 
   // 실시간 자동완성 검색
   useEffect(() => {
@@ -31,7 +37,6 @@ function CheckInOut({ currentVisits, onRefresh }) {
       }
     }
 
-    // 300ms 디바운스
     const timeoutId = setTimeout(searchAutoComplete, 300)
     return () => clearTimeout(timeoutId)
   }, [dogName])
@@ -75,7 +80,6 @@ function CheckInOut({ currentVisits, onRefresh }) {
   const handleAutoCompleteSelect = (customer) => {
     setDogName(customer.dog_name)
     setShowAutoComplete(false)
-    // 자동으로 해당 이름으로 검색
     axios.get(`${API_URL}/customers/search/${customer.dog_name}`)
       .then(response => {
         setSearchResults(response.data)
@@ -95,7 +99,8 @@ function CheckInOut({ currentVisits, onRefresh }) {
 
     try {
       const response = await axios.post(`${API_URL}/checkin`, {
-        customer_id: customer.id
+        customer_id: customer.id,
+        visit_type: visitType
       })
 
       setMessage({ type: 'success', text: response.data.message })
@@ -149,7 +154,7 @@ function CheckInOut({ currentVisits, onRefresh }) {
   const getElapsedTime = (checkIn) => {
     const start = new Date(checkIn)
     const now = new Date()
-    const diff = Math.floor((now - start) / 1000 / 60) // 분 단위
+    const diff = Math.floor((now - start) / 1000 / 60)
     
     const hours = Math.floor(diff / 60)
     const minutes = diff % 60
@@ -163,7 +168,9 @@ function CheckInOut({ currentVisits, onRefresh }) {
   return (
     <div>
       <div className="card">
-        <h2 style={{ marginBottom: '20px', color: '#333' }}>빠른 체크인</h2>
+        <h2 style={{ marginBottom: '20px', color: '#333' }}>
+          {typeEmoji} {typeLabel} 빠른 체크인
+        </h2>
 
         {message.text && (
           <div className={`alert alert-${message.type}`}>
@@ -276,7 +283,7 @@ function CheckInOut({ currentVisits, onRefresh }) {
                     disabled={isLoading}
                     style={{ minWidth: '100px' }}
                   >
-                    체크인
+                    {typeLabel} 체크인
                   </button>
                 </div>
               ))}
@@ -291,22 +298,33 @@ function CheckInOut({ currentVisits, onRefresh }) {
 
       <div className="card">
         <h2 style={{ marginBottom: '20px', color: '#333' }}>
-          현재 체크인 중 ({currentVisits.length}마리)
+          {typeEmoji} 현재 {typeLabel} 체크인 중 ({filteredVisits.length}마리)
         </h2>
 
-        {currentVisits.length === 0 ? (
+        {filteredVisits.length === 0 ? (
           <div className="empty-state">
-            <p>현재 체크인 중인 반려견이 없습니다.</p>
+            <p>현재 {typeLabel} 체크인 중인 반려견이 없습니다.</p>
           </div>
         ) : (
           <div className="current-visits">
-            {currentVisits.map((visit) => (
+            {filteredVisits.map((visit) => (
               <div key={visit.id} className="visit-item">
                 <div className="visit-info">
                   <div>
                     <strong>{visit.dog_name}</strong>
                     <span style={{ color: '#999', marginLeft: '10px' }}>
                       ({visit.breed})
+                    </span>
+                    <span style={{ 
+                      marginLeft: '10px',
+                      padding: '2px 8px',
+                      background: visitType === 'daycare' ? '#fef3c7' : '#dbeafe',
+                      color: visitType === 'daycare' ? '#92400e' : '#1e40af',
+                      borderRadius: '4px',
+                      fontSize: '0.85rem',
+                      fontWeight: '600'
+                    }}>
+                      {typeEmoji} {typeLabel}
                     </span>
                   </div>
                   <small>

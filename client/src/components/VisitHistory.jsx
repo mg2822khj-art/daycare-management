@@ -244,6 +244,7 @@ function VisitHistory() {
               <table className="history-table">
                 <thead>
                   <tr>
+                    <th>타입</th>
                     <th>반려견</th>
                     <th>견종</th>
                     <th>보호자</th>
@@ -257,6 +258,19 @@ function VisitHistory() {
                 <tbody>
                   {groupedHistory[date].map((visit) => (
                     <tr key={visit.id}>
+                      <td>
+                        <span style={{ 
+                          padding: '4px 10px',
+                          background: visit.visit_type === 'daycare' ? '#fef3c7' : '#dbeafe',
+                          color: visit.visit_type === 'daycare' ? '#92400e' : '#1e40af',
+                          borderRadius: '6px',
+                          fontSize: '0.85rem',
+                          fontWeight: '600',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {visit.visit_type === 'daycare' ? '☀️ 데이케어' : '🌙 호텔링'}
+                        </span>
+                      </td>
                       <td><strong>{visit.dog_name}</strong></td>
                       <td>{visit.breed}</td>
                       <td>{visit.customer_name}</td>

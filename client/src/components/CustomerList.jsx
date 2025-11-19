@@ -4,11 +4,20 @@ import * as XLSX from 'xlsx'
 
 const API_URL = '/api'
 
-function CustomerList({ customers }) {
+function CustomerList({ customers, onUpdate }) {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCustomer, setSelectedCustomer] = useState(null)
   const [visitHistory, setVisitHistory] = useState([])
+  const [visitTypeFilter, setVisitTypeFilter] = useState('all') // all, daycare, hoteling
   const [isLoading, setIsLoading] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editForm, setEditForm] = useState({
+    customer_name: '',
+    phone: '',
+    dog_name: '',
+    breed: '',
+    age: ''
+  })
 
   // 고객 검색 필터
   const filteredCustomers = customers.filter(customer => {
@@ -25,6 +34,8 @@ function CustomerList({ customers }) {
   const handleSelectCustomer = async (customer) => {
     setSelectedCustomer(customer)
     setIsLoading(true)
+    setVisitTypeFilter('all')
+    setIsEditing(false)
 
     try {
       const response = await axios.get(`${API_URL}/customers/${customer.id}/visits`)
@@ -40,11 +51,53 @@ function CustomerList({ customers }) {
   const handleCloseDetail = () => {
     setSelectedCustomer(null)
     setVisitHistory([])
+    setIsEditing(false)
+  }
+
+  // 수정 모드 시작
+  const handleStartEdit = () => {
+    setEditForm({
+      customer_name: selectedCustomer.customer_name,
+      phone: selectedCustomer.phone,
+      dog_name: selectedCustomer.dog_name,
+      breed: selectedCustomer.breed,
+      age: selectedCustomer.age
+    })
+    setIsEditing(true)
+  }
+
+  // 수정 취소
+  const handleCancelEdit = () => {
+    setIsEditing(false)
+  }
+
+  // 고객 정보 수정 저장
+  const handleSaveEdit = async () => {
+    if (!editForm.customer_name || !editForm.phone || !editForm.dog_name || !editForm.breed || !editForm.age) {
+      alert('모든 필드를 입력해주세요.')
+      return
+    }
+
+    try {
+      await axios.put(`${API_URL}/customers/${selectedCustomer.id}`, editForm)
+      alert('고객 정보가 수정되었습니다.')
+      setIsEditing(false)
+      
+      // 선택된 고객 정보 업데이트
+      setSelectedCustomer({ ...selectedCustomer, ...editForm })
+      
+      // 부모 컴포넌트 새로고침
+      if (onUpdate) {
+        onUpdate()
+      }
+    } catch (error) {
+      alert(error.response?.data?.error || '고객 정보 수정 중 오류가 발생했습니다.')
+    }
   }
 
   // 고객 삭제
   const handleDeleteCustomer = async (customer, event) => {
-    event.stopPropagation() // 클릭 이벤트 전파 방지
+    event.stopPropagation()
     
     const confirmMessage = `정말로 "${customer.dog_name}" (${customer.customer_name}님)을 삭제하시겠습니까?\n\n⚠️ 모든 방문 기록도 함께 삭제됩니다!`
     
@@ -55,7 +108,6 @@ function CustomerList({ customers }) {
     try {
       await axios.delete(`${API_URL}/customers/${customer.id}`)
       alert('고객이 삭제되었습니다.')
-      // 부모 컴포넌트에서 고객 목록 새로고침
       window.location.reload()
     } catch (error) {
       alert(error.response?.data?.error || '고객 삭제 중 오류가 발생했습니다.')
@@ -70,7 +122,6 @@ function CustomerList({ customers }) {
 
     try {
       await axios.delete(`${API_URL}/visits/${visitId}`)
-      // 방문 기록 다시 조회
       const response = await axios.get(`${API_URL}/customers/${selectedCustomer.id}/visits`)
       setVisitHistory(response.data)
       alert('방문 기록이 삭제되었습니다.')
@@ -102,10 +153,19 @@ function CustomerList({ customers }) {
   }
 
   const getTotalStats = () => {
-    const totalVisits = visitHistory.length
-    const totalMinutes = visitHistory.reduce((sum, visit) => sum + (visit.duration_minutes || 0), 0)
+    const filtered = visitTypeFilter === 'all' 
+      ? visitHistory 
+      : visitHistory.filter(v => v.visit_type === visitTypeFilter)
+    
+    const totalVisits = filtered.length
+    const totalMinutes = filtered.reduce((sum, visit) => sum + (visit.duration_minutes || 0), 0)
     return { totalVisits, totalMinutes }
   }
+
+  // 타입별 필터링된 방문 기록
+  const filteredVisitHistory = visitTypeFilter === 'all'
+    ? visitHistory
+    : visitHistory.filter(v => v.visit_type === visitTypeFilter)
 
   // 엑셀 다운로드 함수
   const handleExportToExcel = () => {
@@ -114,7 +174,6 @@ function CustomerList({ customers }) {
       return
     }
 
-    // 엑셀 데이터 포맷팅
     const excelData = customers.map((customer, index) => ({
       '번호': index + 1,
       '반려견 이름': customer.dog_name,
@@ -125,29 +184,24 @@ function CustomerList({ customers }) {
       '등록일': new Date(customer.created_at).toLocaleDateString('ko-KR')
     }))
 
-    // 워크시트 생성
     const worksheet = XLSX.utils.json_to_sheet(excelData)
     
-    // 컬럼 너비 설정
     worksheet['!cols'] = [
-      { wch: 8 },  // 번호
-      { wch: 15 }, // 반려견 이름
-      { wch: 12 }, // 보호자 이름
-      { wch: 15 }, // 연락처
-      { wch: 15 }, // 견종
-      { wch: 10 }, // 나이
-      { wch: 15 }  // 등록일
+      { wch: 8 },
+      { wch: 15 },
+      { wch: 12 },
+      { wch: 15 },
+      { wch: 15 },
+      { wch: 10 },
+      { wch: 15 }
     ]
 
-    // 워크북 생성
     const workbook = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(workbook, worksheet, '고객 목록')
 
-    // 파일명 생성 (현재 날짜 포함)
     const today = new Date()
-    const fileName = `데이케어_고객목록_${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}.xlsx`
+    const fileName = `댕스케어_고객목록_${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}.xlsx`
 
-    // 파일 다운로드
     XLSX.writeFile(workbook, fileName)
     
     alert(`${customers.length}명의 고객 데이터가 다운로드되었습니다.`)
@@ -232,22 +286,11 @@ function CustomerList({ customers }) {
                     </button>
                   </div>
                   <div className="customer-details" style={{ marginTop: '10px' }}>
-                    <div>
-                      <strong>보호자:</strong> {customer.customer_name}
-                    </div>
-                    <div>
-                      <strong>연락처:</strong> {customer.phone}
-                    </div>
-                    <div>
-                      <strong>견종:</strong> {customer.breed}
-                    </div>
-                    <div>
-                      <strong>나이:</strong> {customer.age}살
-                    </div>
-                    <div>
-                      <strong>등록일:</strong>{' '}
-                      {new Date(customer.created_at).toLocaleDateString('ko-KR')}
-                    </div>
+                    <div><strong>보호자:</strong> {customer.customer_name}</div>
+                    <div><strong>연락처:</strong> {customer.phone}</div>
+                    <div><strong>견종:</strong> {customer.breed}</div>
+                    <div><strong>나이:</strong> {customer.age}살</div>
+                    <div><strong>등록일:</strong> {new Date(customer.created_at).toLocaleDateString('ko-KR')}</div>
                   </div>
                   <div style={{ marginTop: '10px', color: '#667eea', fontSize: '0.9rem' }}>
                     👆 클릭하여 이용 내역 보기
@@ -279,62 +322,189 @@ function CustomerList({ customers }) {
               borderRadius: '12px',
               border: '2px solid #667eea'
             }}>
-              <h2 style={{ color: '#667eea', marginBottom: '15px' }}>
-                🐕 {selectedCustomer.dog_name}
-              </h2>
-              <div style={{ 
-                display: 'grid', 
-                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                gap: '10px',
-                fontSize: '1rem'
-              }}>
-                <div><strong>보호자:</strong> {selectedCustomer.customer_name}</div>
-                <div><strong>연락처:</strong> {selectedCustomer.phone}</div>
-                <div><strong>견종:</strong> {selectedCustomer.breed}</div>
-                <div><strong>나이:</strong> {selectedCustomer.age}살</div>
-                <div><strong>등록일:</strong> {new Date(selectedCustomer.created_at).toLocaleDateString('ko-KR')}</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '15px' }}>
+                <h2 style={{ color: '#667eea', margin: 0 }}>
+                  🐕 {selectedCustomer.dog_name}
+                </h2>
+                {!isEditing && (
+                  <button
+                    className="btn"
+                    onClick={handleStartEdit}
+                    style={{
+                      background: '#f59e0b',
+                      color: 'white',
+                      padding: '8px 16px',
+                      fontSize: '0.9rem'
+                    }}
+                  >
+                    ✏️ 정보 수정
+                  </button>
+                )}
               </div>
+
+              {isEditing ? (
+                <div style={{ display: 'grid', gap: '15px' }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>반려견 이름</label>
+                    <input
+                      type="text"
+                      value={editForm.dog_name}
+                      onChange={(e) => setEditForm({ ...editForm, dog_name: e.target.value })}
+                      style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>보호자 이름</label>
+                    <input
+                      type="text"
+                      value={editForm.customer_name}
+                      onChange={(e) => setEditForm({ ...editForm, customer_name: e.target.value })}
+                      style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>연락처</label>
+                    <input
+                      type="text"
+                      value={editForm.phone}
+                      onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                      style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>견종</label>
+                    <input
+                      type="text"
+                      value={editForm.breed}
+                      onChange={(e) => setEditForm({ ...editForm, breed: e.target.value })}
+                      style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>나이</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="30"
+                      value={editForm.age}
+                      onChange={(e) => setEditForm({ ...editForm, age: e.target.value })}
+                      style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                    <button
+                      className="btn btn-success"
+                      onClick={handleSaveEdit}
+                      style={{ flex: 1 }}
+                    >
+                      💾 저장
+                    </button>
+                    <button
+                      className="btn"
+                      onClick={handleCancelEdit}
+                      style={{ flex: 1, background: '#6c757d', color: 'white' }}
+                    >
+                      취소
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                  gap: '10px',
+                  fontSize: '1rem'
+                }}>
+                  <div><strong>보호자:</strong> {selectedCustomer.customer_name}</div>
+                  <div><strong>연락처:</strong> {selectedCustomer.phone}</div>
+                  <div><strong>견종:</strong> {selectedCustomer.breed}</div>
+                  <div><strong>나이:</strong> {selectedCustomer.age}살</div>
+                  <div><strong>등록일:</strong> {new Date(selectedCustomer.created_at).toLocaleDateString('ko-KR')}</div>
+                </div>
+              )}
             </div>
           </div>
 
+          {/* 타입 필터 버튼 */}
+          <div style={{ 
+            display: 'flex', 
+            gap: '10px', 
+            marginBottom: '20px',
+            flexWrap: 'wrap'
+          }}>
+            <button
+              className="btn"
+              onClick={() => setVisitTypeFilter('all')}
+              style={{
+                background: visitTypeFilter === 'all' ? '#667eea' : '#e0e0e0',
+                color: visitTypeFilter === 'all' ? 'white' : '#666'
+              }}
+            >
+              전체
+            </button>
+            <button
+              className="btn"
+              onClick={() => setVisitTypeFilter('daycare')}
+              style={{
+                background: visitTypeFilter === 'daycare' ? '#f59e0b' : '#e0e0e0',
+                color: visitTypeFilter === 'daycare' ? 'white' : '#666'
+              }}
+            >
+              ☀️ 데이케어
+            </button>
+            <button
+              className="btn"
+              onClick={() => setVisitTypeFilter('hoteling')}
+              style={{
+                background: visitTypeFilter === 'hoteling' ? '#3b82f6' : '#e0e0e0',
+                color: visitTypeFilter === 'hoteling' ? 'white' : '#666'
+              }}
+            >
+              🌙 호텔링
+            </button>
+          </div>
+
           {/* 통계 */}
-          {visitHistory.length > 0 && (
+          {filteredVisitHistory.length > 0 && (
             <div style={{
               background: '#e7f3ff',
               padding: '15px',
               borderRadius: '8px',
               marginBottom: '20px'
             }}>
-              <h3 style={{ color: '#667eea', marginBottom: '10px' }}>📊 이용 통계</h3>
+              <h3 style={{ color: '#667eea', marginBottom: '10px' }}>
+                📊 이용 통계 ({visitTypeFilter === 'all' ? '전체' : visitTypeFilter === 'daycare' ? '데이케어' : '호텔링'})
+              </h3>
               <div style={{ display: 'flex', gap: '30px', fontSize: '1rem' }}>
-                <div>
-                  <strong>총 방문:</strong> {getTotalStats().totalVisits}회
-                </div>
-                <div>
-                  <strong>총 이용시간:</strong> {formatDuration(getTotalStats().totalMinutes)}
-                </div>
+                <div><strong>총 방문:</strong> {getTotalStats().totalVisits}회</div>
+                <div><strong>총 이용시간:</strong> {formatDuration(getTotalStats().totalMinutes)}</div>
               </div>
             </div>
           )}
 
           {/* 방문 기록 */}
           <h3 style={{ marginBottom: '15px', color: '#333' }}>
-            이용 내역 ({visitHistory.length}건)
+            이용 내역 ({filteredVisitHistory.length}건)
           </h3>
 
           {isLoading ? (
             <div className="empty-state">
               <p>로딩 중...</p>
             </div>
-          ) : visitHistory.length === 0 ? (
+          ) : filteredVisitHistory.length === 0 ? (
             <div className="empty-state">
-              <p>아직 방문 기록이 없습니다.</p>
+              <p>
+                {visitTypeFilter === 'all' 
+                  ? '아직 방문 기록이 없습니다.' 
+                  : `${visitTypeFilter === 'daycare' ? '데이케어' : '호텔링'} 방문 기록이 없습니다.`}
+              </p>
             </div>
           ) : (
             <div style={{ overflowX: 'auto' }}>
               <table className="history-table">
                 <thead>
                   <tr>
+                    <th>타입</th>
                     <th>체크인</th>
                     <th>체크아웃</th>
                     <th>이용시간</th>
@@ -342,8 +512,20 @@ function CustomerList({ customers }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {visitHistory.map((visit) => (
+                  {filteredVisitHistory.map((visit) => (
                     <tr key={visit.id}>
+                      <td>
+                        <span style={{ 
+                          padding: '4px 10px',
+                          background: visit.visit_type === 'daycare' ? '#fef3c7' : '#dbeafe',
+                          color: visit.visit_type === 'daycare' ? '#92400e' : '#1e40af',
+                          borderRadius: '6px',
+                          fontSize: '0.85rem',
+                          fontWeight: '600'
+                        }}>
+                          {visit.visit_type === 'daycare' ? '☀️ 데이케어' : '🌙 호텔링'}
+                        </span>
+                      </td>
                       <td>{formatDateTime(visit.check_in)}</td>
                       <td>{formatDateTime(visit.check_out)}</td>
                       <td>

@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import {
   createCustomer,
+  updateCustomer,
   findCustomersByDogName,
   searchCustomersByDogName,
   findCustomerById,
@@ -94,13 +95,17 @@ app.get('/api/customers/autocomplete', (req, res) => {
   }
 });
 
-// 체크인
+// 체크인 (타입 구분: daycare/hoteling)
 app.post('/api/checkin', (req, res) => {
   try {
-    const { customer_id } = req.body;
+    const { customer_id, visit_type = 'daycare' } = req.body;
     
     if (!customer_id) {
       return res.status(400).json({ error: '고객을 선택해주세요.' });
+    }
+
+    if (!['daycare', 'hoteling'].includes(visit_type)) {
+      return res.status(400).json({ error: '유효하지 않은 방문 타입입니다.' });
     }
 
     // 고객 찾기
@@ -116,12 +121,14 @@ app.post('/api/checkin', (req, res) => {
     }
 
     // 체크인
-    const result = checkIn(customer.id);
+    const result = checkIn(customer.id, visit_type);
+    const typeLabel = visit_type === 'daycare' ? '데이케어' : '호텔링';
     res.json({ 
       success: true, 
       visit_id: result.lastInsertRowid,
       customer: customer,
-      message: `${customer.dog_name} (${customer.customer_name}님) 체크인 완료!`
+      visit_type: visit_type,
+      message: `${customer.dog_name} (${customer.customer_name}님) ${typeLabel} 체크인 완료!`
     });
   } catch (error) {
     console.error(error);
@@ -200,11 +207,47 @@ app.get('/api/visit-dates', (req, res) => {
 app.get('/api/customers/:customerId/visits', (req, res) => {
   try {
     const { customerId } = req.params;
+    const { visit_type } = req.query; // daycare, hoteling, 또는 all
     const history = getCustomerVisitHistory(customerId);
+    
+    // 타입 필터링
+    if (visit_type && visit_type !== 'all') {
+      const filtered = history.filter(v => v.visit_type === visit_type);
+      return res.json(filtered);
+    }
+    
     res.json(history);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: '고객 방문 기록 조회 중 오류가 발생했습니다.' });
+  }
+});
+
+// 고객 정보 수정
+app.put('/api/customers/:customerId', (req, res) => {
+  try {
+    const { customerId } = req.params;
+    const { customer_name, phone, dog_name, breed, age } = req.body;
+    
+    // 유효성 검사
+    if (!customer_name || !phone || !dog_name || !breed || !age) {
+      return res.status(400).json({ error: '모든 필드를 입력해주세요.' });
+    }
+
+    // 고객 존재 확인
+    const customer = findCustomerById(customerId);
+    if (!customer) {
+      return res.status(404).json({ error: '고객을 찾을 수 없습니다.' });
+    }
+
+    updateCustomer(customerId, customer_name, phone, dog_name, breed, age);
+    res.json({ 
+      success: true, 
+      message: '고객 정보가 수정되었습니다.'
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: '고객 정보 수정 중 오류가 발생했습니다.' });
   }
 });
 

@@ -43,12 +43,12 @@ function saveDatabase() {
 
 // 기존 테이블이 잘못된 구조일 수 있으므로 체크
 try {
-  const tableInfo = db.exec("SELECT sql FROM sqlite_master WHERE type='table' AND name='customers'");
+  const tableInfo = db.exec("SELECT sql FROM sqlite_master WHERE type='table' AND name='visits'");
   if (tableInfo.length > 0) {
     const createSQL = tableInfo[0].values[0][0];
-    // UNIQUE 제약조건이 있는지 또는 deleted_at 컬럼이 없는지 확인
-    if (createSQL && (createSQL.includes('UNIQUE') || !createSQL.includes('deleted_at'))) {
-      console.log('⚠️ 기존 데이터베이스 구조를 업데이트합니다. 테이블을 재생성합니다...');
+    // visit_type 컬럼이 없는지 확인
+    if (createSQL && !createSQL.includes('visit_type')) {
+      console.log('⚠️ 데이터베이스에 visit_type 컬럼이 없습니다. 테이블을 재생성합니다...');
       // 기존 테이블 삭제
       db.run('DROP TABLE IF EXISTS visits');
       db.run('DROP TABLE IF EXISTS customers');
@@ -59,7 +59,7 @@ try {
   console.log('테이블 체크 중 에러 (무시됨):', e.message);
 }
 
-// 테이블 생성 (soft delete 지원)
+// 테이블 생성 (soft delete 지원, 데이케어/호텔링 구분)
 db.run(`
   CREATE TABLE IF NOT EXISTS customers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -75,6 +75,7 @@ db.run(`
   CREATE TABLE IF NOT EXISTS visits (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     customer_id INTEGER NOT NULL,
+    visit_type TEXT NOT NULL DEFAULT 'daycare',
     check_in DATETIME NOT NULL,
     check_out DATETIME,
     duration_minutes INTEGER,
@@ -84,6 +85,7 @@ db.run(`
 
   CREATE INDEX IF NOT EXISTS idx_dog_name ON customers(dog_name);
   CREATE INDEX IF NOT EXISTS idx_visits_customer ON visits(customer_id);
+  CREATE INDEX IF NOT EXISTS idx_visits_type ON visits(visit_type);
   CREATE INDEX IF NOT EXISTS idx_customers_deleted ON customers(deleted_at);
   CREATE INDEX IF NOT EXISTS idx_visits_deleted ON visits(deleted_at);
 `);
@@ -99,6 +101,15 @@ export function createCustomer(customer_name, phone, dog_name, breed, age) {
   saveDatabase();
   const result = db.exec('SELECT last_insert_rowid() as id');
   return { lastInsertRowid: result[0].values[0][0] };
+}
+
+// 고객 정보 수정
+export function updateCustomer(customer_id, customer_name, phone, dog_name, breed, age) {
+  const stmt = db.prepare('UPDATE customers SET customer_name = ?, phone = ?, dog_name = ?, breed = ?, age = ? WHERE id = ?');
+  stmt.bind([customer_name, phone, dog_name, breed, age, customer_id]);
+  stmt.step();
+  stmt.free();
+  saveDatabase();
 }
 
 // 반려견 이름으로 고객 조회 (정확히 일치, 삭제되지 않은 것만)
@@ -147,10 +158,10 @@ export function getAllCustomers() {
   });
 }
 
-// 체크인 (한국 시간 KST, UTC+9)
-export function checkIn(customer_id) {
-  const stmt = db.prepare("INSERT INTO visits (customer_id, check_in) VALUES (?, datetime('now', '+9 hours'))");
-  stmt.bind([customer_id]);
+// 체크인 (한국 시간 KST, UTC+9, 타입 구분)
+export function checkIn(customer_id, visit_type = 'daycare') {
+  const stmt = db.prepare("INSERT INTO visits (customer_id, visit_type, check_in) VALUES (?, ?, datetime('now', '+9 hours'))");
+  stmt.bind([customer_id, visit_type]);
   stmt.step();
   stmt.free();
   saveDatabase();
