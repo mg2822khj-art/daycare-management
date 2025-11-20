@@ -305,9 +305,13 @@ export function checkIn(customer_id, visit_type = 'daycare') {
   return { lastInsertRowid: result[0].values[0][0] };
 }
 
-// 체크인 시간 수정
+// 체크인 시간 수정 (한국 시간 KST, UTC+9)
 export function updateCheckInTime(visit_id, new_check_in_time) {
   try {
+    // 받은 시간 문자열이 이미 한국 시간 형식인지 확인
+    // SQLite의 datetime 함수를 사용하여 한국 시간으로 저장
+    // 입력된 시간을 그대로 사용하되, 형식이 맞는지 확인
+    
     // 체크아웃이 안 된 방문만 수정 가능
     const stmt = db.prepare(`
       UPDATE visits 

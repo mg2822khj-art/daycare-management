@@ -151,12 +151,13 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
 
   const handleEditCheckInTime = (visit) => {
     // 체크인 시간을 datetime-local 형식으로 변환
-    const checkInDate = new Date(visit.check_in)
-    const year = checkInDate.getFullYear()
-    const month = String(checkInDate.getMonth() + 1).padStart(2, '0')
-    const day = String(checkInDate.getDate()).padStart(2, '0')
-    const hours = String(checkInDate.getHours()).padStart(2, '0')
-    const minutes = String(checkInDate.getMinutes()).padStart(2, '0')
+    // 서버에서 받은 시간 문자열 (YYYY-MM-DD HH:MM:SS)을 그대로 파싱
+    const timeString = visit.check_in
+    const [datePart, timePart] = timeString.split(' ')
+    const [year, month, day] = datePart.split('-')
+    const [hours, minutes] = timePart.split(':')
+    
+    // datetime-local 형식으로 변환 (YYYY-MM-DDTHH:MM)
     const datetimeLocal = `${year}-${month}-${day}T${hours}:${minutes}`
     
     setEditingVisit(visit)
@@ -170,12 +171,17 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
     setMessage({ type: '', text: '' })
 
     try {
-      // datetime-local 형식을 ISO 형식으로 변환
-      const date = new Date(editCheckInTime)
-      const isoString = date.toISOString().slice(0, 19).replace('T', ' ')
+      // datetime-local 형식 (YYYY-MM-DDTHH:MM)을 한국 시간 문자열로 변환
+      // 입력받은 시간을 한국 시간으로 직접 해석 (로컬 시간대 무시)
+      const [datePart, timePart] = editCheckInTime.split('T')
+      const [year, month, day] = datePart.split('-')
+      const [hours, minutes] = timePart.split(':')
+      
+      // YYYY-MM-DD HH:MM:SS 형식으로 변환 (한국 시간으로 직접 저장)
+      const kstString = `${year}-${month}-${day} ${hours}:${minutes}:00`
 
       const response = await axios.put(`${API_URL}/visits/${editingVisit.id}/checkin-time`, {
-        check_in_time: isoString
+        check_in_time: kstString
       })
 
       setMessage({ type: 'success', text: response.data.message })

@@ -165,10 +165,24 @@ app.put('/api/visits/:visitId/checkin-time', (req, res) => {
       return res.status(400).json({ error: '체크인 시간을 입력해주세요.' });
     }
 
-    // 날짜 형식 검증
-    const date = new Date(check_in_time);
-    if (isNaN(date.getTime())) {
-      return res.status(400).json({ error: '유효하지 않은 날짜 형식입니다.' });
+    // 날짜 형식 검증 (YYYY-MM-DD HH:MM:SS 형식)
+    const datePattern = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
+    if (!datePattern.test(check_in_time)) {
+      return res.status(400).json({ error: '유효하지 않은 날짜 형식입니다. YYYY-MM-DD HH:MM:SS 형식이어야 합니다.' });
+    }
+
+    // 날짜 유효성 검증
+    const [datePart, timePart] = check_in_time.split(' ');
+    const [year, month, day] = datePart.split('-').map(Number);
+    const [hours, minutes, seconds] = timePart.split(':').map(Number);
+    
+    const date = new Date(year, month - 1, day, hours, minutes, seconds);
+    if (date.getFullYear() !== year || 
+        date.getMonth() !== month - 1 || 
+        date.getDate() !== day ||
+        date.getHours() !== hours ||
+        date.getMinutes() !== minutes) {
+      return res.status(400).json({ error: '유효하지 않은 날짜/시간입니다.' });
     }
 
     const success = updateCheckInTime(visitId, check_in_time);
