@@ -190,7 +190,7 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
                     setShowAutoComplete(true)
                   }
                 }}
-                placeholder="반려견 이름을 입력하세요"
+                placeholder="반려견 이름, 보호자 이름, 연락처를 입력하세요"
                 disabled={isLoading}
                 autoComplete="off"
               />
@@ -236,7 +236,7 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
                       🐕 {customer.dog_name}
                     </div>
                     <div style={{ fontSize: '0.85rem', color: '#666' }}>
-                      {customer.customer_name} | {customer.breed} | {customer.age_years}살 {customer.age_months}개월
+                      {customer.customer_name} | {customer.phone} | {customer.breed} | {customer.age_years}살 {customer.age_months}개월
                     </div>
                   </div>
                 ))}
@@ -292,7 +292,7 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
         )}
 
         <p style={{ color: '#666', fontSize: '0.9rem', marginTop: '15px' }}>
-          💡 팁: 반려견 이름을 입력하면 자동으로 추천 목록이 나타납니다
+          💡 팁: 반려견 이름, 보호자 이름, 연락처 중 하나를 입력하면 자동으로 추천 목록이 나타납니다
         </p>
       </div>
 

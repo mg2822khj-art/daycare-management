@@ -83,13 +83,14 @@ app.get('/api/customers/:customerId', (req, res) => {
   }
 });
 
-// 반려견 이름으로 고객 검색 (정확히 일치)
-app.get('/api/customers/search/:dogName', (req, res) => {
+// 반려견 이름, 고객 이름, 연락처로 고객 검색 (부분 일치)
+app.get('/api/customers/search/:searchTerm', (req, res) => {
   try {
-    const customers = findCustomersByDogName(req.params.dogName);
-    if (!customers.length) {
-      return res.status(404).json({ error: '등록되지 않은 반려견입니다.' });
+    const searchTerm = req.params.searchTerm;
+    if (!searchTerm || searchTerm.trim().length === 0) {
+      return res.json([]);
     }
+    const customers = searchCustomersByDogName(searchTerm.trim());
     res.json(customers);
   } catch (error) {
     console.error(error);
