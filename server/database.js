@@ -43,17 +43,46 @@ function saveDatabase() {
 
 // 기존 테이블이 잘못된 구조일 수 있으므로 체크
 try {
-  const tableInfo = db.exec("SELECT sql FROM sqlite_master WHERE type='table' AND name='visits'");
-  if (tableInfo.length > 0) {
-    const createSQL = tableInfo[0].values[0][0];
-    // visit_type 컬럼이 없는지 확인
-    if (createSQL && !createSQL.includes('visit_type')) {
-      console.log('⚠️ 데이터베이스에 visit_type 컬럼이 없습니다. 테이블을 재생성합니다...');
-      // 기존 테이블 삭제
-      db.run('DROP TABLE IF EXISTS visits');
-      db.run('DROP TABLE IF EXISTS customers');
-      console.log('✅ 기존 테이블 삭제 완료');
+  // customers 테이블 체크
+  const customersTableInfo = db.exec("SELECT sql FROM sqlite_master WHERE type='table' AND name='customers'");
+  const visitsTableInfo = db.exec("SELECT sql FROM sqlite_master WHERE type='table' AND name='visits'");
+  
+  let needRecreate = false;
+  
+  // customers 테이블에 birth_date 컬럼이 있는지 확인
+  if (customersTableInfo.length > 0) {
+    const createSQL = customersTableInfo[0].values[0][0];
+    if (createSQL && !createSQL.includes('birth_date')) {
+      console.log('⚠️ customers 테이블에 birth_date 컬럼이 없습니다.');
+      needRecreate = true;
     }
+    // deleted_at 컬럼 확인
+    if (createSQL && !createSQL.includes('deleted_at')) {
+      console.log('⚠️ customers 테이블에 deleted_at 컬럼이 없습니다.');
+      needRecreate = true;
+    }
+  }
+  
+  // visits 테이블에 visit_type 컬럼이 있는지 확인
+  if (visitsTableInfo.length > 0) {
+    const createSQL = visitsTableInfo[0].values[0][0];
+    if (createSQL && !createSQL.includes('visit_type')) {
+      console.log('⚠️ visits 테이블에 visit_type 컬럼이 없습니다.');
+      needRecreate = true;
+    }
+    // deleted_at 컬럼 확인
+    if (createSQL && !createSQL.includes('deleted_at')) {
+      console.log('⚠️ visits 테이블에 deleted_at 컬럼이 없습니다.');
+      needRecreate = true;
+    }
+  }
+  
+  if (needRecreate) {
+    console.log('⚠️ 데이터베이스 스키마가 오래되었습니다. 테이블을 재생성합니다...');
+    // 기존 테이블 삭제
+    db.run('DROP TABLE IF EXISTS visits');
+    db.run('DROP TABLE IF EXISTS customers');
+    console.log('✅ 기존 테이블 삭제 완료');
   }
 } catch (e) {
   console.log('테이블 체크 중 에러 (무시됨):', e.message);
