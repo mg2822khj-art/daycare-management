@@ -11,6 +11,7 @@ import {
   getAllCustomers,
   checkIn,
   checkOut,
+  updateCheckInTime,
   getCurrentVisit,
   getCustomerCurrentVisit,
   getVisitHistory,
@@ -151,6 +152,37 @@ app.post('/api/checkin', (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: '체크인 중 오류가 발생했습니다.' });
+  }
+});
+
+// 체크인 시간 수정
+app.put('/api/visits/:visitId/checkin-time', (req, res) => {
+  try {
+    const { visitId } = req.params;
+    const { check_in_time } = req.body;
+    
+    if (!check_in_time) {
+      return res.status(400).json({ error: '체크인 시간을 입력해주세요.' });
+    }
+
+    // 날짜 형식 검증
+    const date = new Date(check_in_time);
+    if (isNaN(date.getTime())) {
+      return res.status(400).json({ error: '유효하지 않은 날짜 형식입니다.' });
+    }
+
+    const success = updateCheckInTime(visitId, check_in_time);
+    if (!success) {
+      return res.status(400).json({ error: '체크인 시간 수정에 실패했습니다. 이미 체크아웃된 방문이거나 존재하지 않는 방문입니다.' });
+    }
+
+    res.json({ 
+      success: true,
+      message: '체크인 시간이 수정되었습니다.'
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: '체크인 시간 수정 중 오류가 발생했습니다.' });
   }
 });
 

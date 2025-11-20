@@ -14,6 +14,8 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
   const [showAutoComplete, setShowAutoComplete] = useState(false)
   const [message, setMessage] = useState({ type: '', text: '' })
   const [isLoading, setIsLoading] = useState(false)
+  const [editingVisit, setEditingVisit] = useState(null)
+  const [editCheckInTime, setEditCheckInTime] = useState('')
   const autoCompleteRef = useRef(null)
 
   // 현재 타입의 방문만 필터링
@@ -145,6 +147,54 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const handleEditCheckInTime = (visit) => {
+    // 체크인 시간을 datetime-local 형식으로 변환
+    const checkInDate = new Date(visit.check_in)
+    const year = checkInDate.getFullYear()
+    const month = String(checkInDate.getMonth() + 1).padStart(2, '0')
+    const day = String(checkInDate.getDate()).padStart(2, '0')
+    const hours = String(checkInDate.getHours()).padStart(2, '0')
+    const minutes = String(checkInDate.getMinutes()).padStart(2, '0')
+    const datetimeLocal = `${year}-${month}-${day}T${hours}:${minutes}`
+    
+    setEditingVisit(visit)
+    setEditCheckInTime(datetimeLocal)
+  }
+
+  const handleSaveCheckInTime = async () => {
+    if (!editingVisit || !editCheckInTime) return
+
+    setIsLoading(true)
+    setMessage({ type: '', text: '' })
+
+    try {
+      // datetime-local 형식을 ISO 형식으로 변환
+      const date = new Date(editCheckInTime)
+      const isoString = date.toISOString().slice(0, 19).replace('T', ' ')
+
+      const response = await axios.put(`${API_URL}/visits/${editingVisit.id}/checkin-time`, {
+        check_in_time: isoString
+      })
+
+      setMessage({ type: 'success', text: response.data.message })
+      setEditingVisit(null)
+      setEditCheckInTime('')
+      onRefresh()
+    } catch (error) {
+      setMessage({
+        type: 'error',
+        text: error.response?.data?.error || '체크인 시간 수정 중 오류가 발생했습니다.'
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleCancelEdit = () => {
+    setEditingVisit(null)
+    setEditCheckInTime('')
   }
 
   const formatDateTime = (datetime) => {
@@ -384,18 +434,122 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
                     경과시간: {getElapsedTime(visit.check_in)}
                   </small>
                 </div>
-                <button
-                  className="btn btn-danger"
-                  onClick={() => handleCheckOut(visit)}
-                  disabled={isLoading}
-                >
-                  체크아웃
-                </button>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <button
+                    className="btn"
+                    onClick={() => handleEditCheckInTime(visit)}
+                    disabled={isLoading}
+                    style={{
+                      background: '#6c757d',
+                      color: 'white',
+                      border: 'none',
+                      padding: '8px 15px',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '0.9rem'
+                    }}
+                  >
+                    ⏰ 시간 수정
+                  </button>
+                  <button
+                    className="btn btn-danger"
+                    onClick={() => handleCheckOut(visit)}
+                    disabled={isLoading}
+                  >
+                    체크아웃
+                  </button>
+                </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* 체크인 시간 수정 모달 */}
+      {editingVisit && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 2000
+        }} onClick={handleCancelEdit}>
+          <div style={{
+            background: 'white',
+            padding: '30px',
+            borderRadius: '12px',
+            maxWidth: '500px',
+            width: '90%',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+          }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ marginBottom: '20px', color: '#333' }}>
+              체크인 시간 수정
+            </h3>
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ marginBottom: '10px', color: '#666' }}>
+                <strong>{editingVisit.dog_name}</strong> ({editingVisit.customer_name}님)
+              </div>
+              <div style={{ marginBottom: '15px', fontSize: '0.9rem', color: '#999' }}>
+                현재 체크인 시간: {formatDateTime(editingVisit.check_in)}
+              </div>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#333' }}>
+                새로운 체크인 시간
+              </label>
+              <input
+                type="datetime-local"
+                value={editCheckInTime}
+                onChange={(e) => setEditCheckInTime(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  border: '2px solid #667eea',
+                  borderRadius: '6px',
+                  fontSize: '1rem'
+                }}
+                disabled={isLoading}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={handleCancelEdit}
+                disabled={isLoading}
+                style={{
+                  padding: '10px 20px',
+                  background: '#6c757d',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '1rem'
+                }}
+              >
+                취소
+              </button>
+              <button
+                onClick={handleSaveCheckInTime}
+                disabled={isLoading || !editCheckInTime}
+                style={{
+                  padding: '10px 20px',
+                  background: '#667eea',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '1rem',
+                  fontWeight: '600'
+                }}
+              >
+                {isLoading ? '저장 중...' : '저장'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

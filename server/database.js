@@ -305,6 +305,26 @@ export function checkIn(customer_id, visit_type = 'daycare') {
   return { lastInsertRowid: result[0].values[0][0] };
 }
 
+// 체크인 시간 수정
+export function updateCheckInTime(visit_id, new_check_in_time) {
+  try {
+    // 체크아웃이 안 된 방문만 수정 가능
+    const stmt = db.prepare(`
+      UPDATE visits 
+      SET check_in = ?
+      WHERE id = ? AND check_out IS NULL
+    `);
+    stmt.bind([new_check_in_time, visit_id]);
+    stmt.step();
+    stmt.free();
+    saveDatabase();
+    return true;
+  } catch (error) {
+    console.error('체크인 시간 수정 오류:', error);
+    return false;
+  }
+}
+
 // 체크아웃 (한국 시간 KST, UTC+9)
 export function checkOut(visit_id) {
   const stmt = db.prepare(`
