@@ -13,6 +13,7 @@ import {
   checkOut,
   updateCheckInTime,
   getVisitById,
+  calculateDuration,
   calculateDaycareFee,
   getCurrentVisit,
   getCustomerCurrentVisit,
@@ -221,10 +222,9 @@ app.post('/api/checkout/calculate', (req, res) => {
       return res.status(400).json({ error: '이미 체크아웃된 방문입니다.' });
     }
 
-    // 체크아웃 시간 계산 (현재 시간 기준)
-    const checkOutTime = new Date();
-    const checkInTime = new Date(visit.check_in);
-    const duration_minutes = Math.floor((checkOutTime - checkInTime) / 1000 / 60);
+    // 체크아웃 시간 계산 (한국 시간 기준)
+    // 데이터베이스 함수를 사용하여 한국 시간으로 계산
+    const duration_minutes = calculateDuration(visit.check_in);
 
     // 데이케어만 요금 계산
     if (visit.visit_type === 'daycare') {

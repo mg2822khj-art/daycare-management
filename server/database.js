@@ -360,6 +360,53 @@ export function getVisitById(visit_id) {
   }
 }
 
+// 이용 시간 계산 (한국 시간 기준, 분 단위)
+export function calculateDuration(check_in_time) {
+  try {
+    // SQLite의 datetime 함수를 사용하여 한국 시간으로 계산
+    const stmt = db.prepare(`
+      SELECT CAST((julianday(datetime('now', '+9 hours')) - julianday(?)) * 24 * 60 AS INTEGER) as duration_minutes
+    `);
+    stmt.bind([check_in_time]);
+    
+    let duration_minutes = 0;
+    if (stmt.step()) {
+      const result = stmt.getAsObject();
+      duration_minutes = result.duration_minutes || 0;
+    }
+    stmt.free();
+    
+    return duration_minutes;
+  } catch (error) {
+    console.error('이용 시간 계산 오류:', error);
+    // 폴백: 문자열 파싱 방식 (한국 시간 기준)
+    try {
+      const [datePart, timePart] = check_in_time.split(' ');
+      const [year, month, day] = datePart.split('-').map(Number);
+      const [hour, minute, second] = timePart.split(':').map(Number);
+      
+      // 체크인 시간을 한국 시간으로 파싱 (로컬 시간으로 해석)
+      const checkInTime = new Date(year, month - 1, day, hour, minute, second || 0);
+      
+      // 현재 시간을 한국 시간으로 계산
+      const now = new Date();
+      const kstOffset = 9 * 60 * 60 * 1000; // 한국 시간 오프셋 (밀리초)
+      const utcTime = now.getTime() + (now.getTimezoneOffset() * 60 * 1000);
+      const checkOutTime = new Date(utcTime + kstOffset);
+      
+      // 체크인 시간도 UTC로 변환 후 한국 시간으로 변환
+      const checkInUtc = checkInTime.getTime() - (checkInTime.getTimezoneOffset() * 60 * 1000);
+      const checkInKst = new Date(checkInUtc + kstOffset);
+      
+      const duration = Math.floor((checkOutTime - checkInKst) / 1000 / 60);
+      return duration >= 0 ? duration : 0; // 음수 방지
+    } catch (e) {
+      console.error('이용 시간 계산 폴백 오류:', e);
+      return 0;
+    }
+  }
+}
+
 // 데이케어 요금 계산 (30분 단위, 미달 시간은 계산 안 함)
 export function calculateDaycareFee(weight, duration_minutes) {
   if (!weight || weight < 2) {
