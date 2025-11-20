@@ -66,6 +66,23 @@ app.get('/api/customers', (req, res) => {
   }
 });
 
+// 개별 고객 조회
+app.get('/api/customers/:customerId', (req, res) => {
+  try {
+    const { customerId } = req.params;
+    const customer = findCustomerById(customerId);
+    
+    if (!customer) {
+      return res.status(404).json({ error: '고객을 찾을 수 없습니다.' });
+    }
+    
+    res.json(customer);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: '고객 조회 중 오류가 발생했습니다.' });
+  }
+});
+
 // 반려견 이름으로 고객 검색 (정확히 일치)
 app.get('/api/customers/search/:dogName', (req, res) => {
   try {

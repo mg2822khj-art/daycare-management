@@ -94,18 +94,38 @@ console.log('✅ 데이터베이스 초기화 완료');
 
 // 나이 계산 함수 (생년월일 기준)
 export function calculateAge(birth_date) {
-  const today = new Date();
-  const birth = new Date(birth_date);
-  
-  let years = today.getFullYear() - birth.getFullYear();
-  let months = today.getMonth() - birth.getMonth();
-  
-  if (months < 0) {
-    years--;
-    months += 12;
+  if (!birth_date) {
+    return { years: 0, months: 0 };
   }
   
-  return { years, months };
+  try {
+    const today = new Date();
+    const birth = new Date(birth_date);
+    
+    // 유효한 날짜인지 확인
+    if (isNaN(birth.getTime())) {
+      return { years: 0, months: 0 };
+    }
+    
+    let years = today.getFullYear() - birth.getFullYear();
+    let months = today.getMonth() - birth.getMonth();
+    
+    if (months < 0) {
+      years--;
+      months += 12;
+    }
+    
+    // 음수 방지
+    if (years < 0) {
+      years = 0;
+      months = 0;
+    }
+    
+    return { years, months };
+  } catch (error) {
+    console.error('나이 계산 오류:', error);
+    return { years: 0, months: 0 };
+  }
 }
 
 // 고객 등록 (birth_date 저장)
@@ -139,6 +159,13 @@ export function findCustomersByDogName(dog_name) {
       const age = calculateAge(customer.birth_date);
       customer.age_years = age.years;
       customer.age_months = age.months;
+    } else if (customer.age !== undefined && customer.age !== null) {
+      // 기존 데이터 호환성
+      customer.age_years = parseInt(customer.age) || 0;
+      customer.age_months = 0;
+    } else {
+      customer.age_years = 0;
+      customer.age_months = 0;
     }
     results.push(customer);
   }
@@ -159,6 +186,13 @@ export function searchCustomersByDogName(searchTerm) {
       const age = calculateAge(customer.birth_date);
       customer.age_years = age.years;
       customer.age_months = age.months;
+    } else if (customer.age !== undefined && customer.age !== null) {
+      // 기존 데이터 호환성
+      customer.age_years = parseInt(customer.age) || 0;
+      customer.age_months = 0;
+    } else {
+      customer.age_years = 0;
+      customer.age_months = 0;
     }
     results.push(customer);
   }
@@ -168,34 +202,67 @@ export function searchCustomersByDogName(searchTerm) {
 
 // 고객 ID로 조회 (나이 자동 계산)
 export function findCustomerById(id) {
-  const stmt = db.prepare('SELECT * FROM customers WHERE id = ?');
-  stmt.bind([id]);
-  const result = stmt.step() ? stmt.getAsObject() : null;
-  stmt.free();
-  if (result && result.birth_date) {
-    const age = calculateAge(result.birth_date);
-    result.age_years = age.years;
-    result.age_months = age.months;
+  try {
+    const stmt = db.prepare('SELECT * FROM customers WHERE id = ?');
+    stmt.bind([id]);
+    const result = stmt.step() ? stmt.getAsObject() : null;
+    stmt.free();
+    
+    if (!result) {
+      return null;
+    }
+    
+    // birth_date가 있으면 계산, 없으면 기본값 설정
+    if (result.birth_date) {
+      const age = calculateAge(result.birth_date);
+      result.age_years = age.years;
+      result.age_months = age.months;
+    } else {
+      // 기존 데이터 호환성: age 컬럼이 있으면 사용
+      if (result.age !== undefined && result.age !== null) {
+        result.age_years = parseInt(result.age) || 0;
+        result.age_months = 0;
+      } else {
+        result.age_years = 0;
+        result.age_months = 0;
+      }
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('고객 조회 오류:', error);
+    return null;
   }
-  return result;
 }
 
 // 모든 고객 조회 (삭제되지 않은 것만, 나이 자동 계산)
 export function getAllCustomers() {
-  const result = db.exec('SELECT * FROM customers WHERE deleted_at IS NULL ORDER BY created_at DESC');
-  if (!result.length) return [];
-  const columns = result[0].columns;
-  return result[0].values.map(row => {
-    const obj = {};
-    columns.forEach((col, idx) => { obj[col] = row[idx]; });
-    // 나이 자동 계산
-    if (obj.birth_date) {
-      const age = calculateAge(obj.birth_date);
-      obj.age_years = age.years;
-      obj.age_months = age.months;
-    }
-    return obj;
-  });
+  try {
+    const result = db.exec('SELECT * FROM customers WHERE deleted_at IS NULL ORDER BY created_at DESC');
+    if (!result.length) return [];
+    const columns = result[0].columns;
+    return result[0].values.map(row => {
+      const obj = {};
+      columns.forEach((col, idx) => { obj[col] = row[idx]; });
+      // 나이 자동 계산
+      if (obj.birth_date) {
+        const age = calculateAge(obj.birth_date);
+        obj.age_years = age.years;
+        obj.age_months = age.months;
+      } else if (obj.age !== undefined && obj.age !== null) {
+        // 기존 데이터 호환성
+        obj.age_years = parseInt(obj.age) || 0;
+        obj.age_months = 0;
+      } else {
+        obj.age_years = 0;
+        obj.age_months = 0;
+      }
+      return obj;
+    });
+  } catch (error) {
+    console.error('고객 목록 조회 오류:', error);
+    return [];
+  }
 }
 
 // 체크인 (한국 시간 KST, UTC+9, 타입 구분)
@@ -313,20 +380,24 @@ export function getVisitDates() {
 
 // 특정 고객의 방문 기록 조회
 export function getCustomerVisitHistory(customer_id) {
-  const result = db.exec(`
-    SELECT v.*
-    FROM visits v
-    WHERE v.customer_id = ? AND v.check_out IS NOT NULL
-    ORDER BY v.check_in DESC
-  `, [customer_id]);
-  
-  if (!result.length) return [];
-  const columns = result[0].columns;
-  return result[0].values.map(row => {
-    const obj = {};
-    columns.forEach((col, idx) => { obj[col] = row[idx]; });
-    return obj;
-  });
+  try {
+    const stmt = db.prepare(`
+      SELECT v.*
+      FROM visits v
+      WHERE v.customer_id = ? AND v.check_out IS NOT NULL AND v.deleted_at IS NULL
+      ORDER BY v.check_in DESC
+    `);
+    stmt.bind([customer_id]);
+    const results = [];
+    while (stmt.step()) {
+      results.push(stmt.getAsObject());
+    }
+    stmt.free();
+    return results;
+  } catch (error) {
+    console.error('방문 기록 조회 오류:', error);
+    return [];
+  }
 }
 
 // 고객 삭제 (soft delete, 한국 시간)
