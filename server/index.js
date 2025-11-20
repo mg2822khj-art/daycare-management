@@ -12,6 +12,8 @@ import {
   checkIn,
   checkOut,
   updateCheckInTime,
+  getVisitById,
+  calculateDaycareFee,
   getCurrentVisit,
   getCustomerCurrentVisit,
   getVisitHistory,
@@ -37,14 +39,14 @@ app.use(express.json());
 // 고객 등록
 app.post('/api/customers', (req, res) => {
   try {
-    const { customer_name, phone, dog_name, breed, birth_date } = req.body;
+    const { customer_name, phone, dog_name, breed, birth_date, weight } = req.body;
     
     // 유효성 검사
     if (!customer_name || !phone || !dog_name || !breed || !birth_date) {
       return res.status(400).json({ error: '모든 필드를 입력해주세요.' });
     }
 
-    const result = createCustomer(customer_name, phone, dog_name, breed, birth_date);
+    const result = createCustomer(customer_name, phone, dog_name, breed, birth_date, weight || null);
     res.json({ 
       success: true, 
       id: result.lastInsertRowid,
@@ -200,6 +202,60 @@ app.put('/api/visits/:visitId/checkin-time', (req, res) => {
   }
 });
 
+// 체크아웃 요금 계산 (체크아웃 전)
+app.post('/api/checkout/calculate', (req, res) => {
+  try {
+    const { visit_id } = req.body;
+    
+    if (!visit_id) {
+      return res.status(400).json({ error: '방문 ID가 필요합니다.' });
+    }
+
+    // 방문 정보 조회
+    const visit = getVisitById(visit_id);
+    if (!visit) {
+      return res.status(404).json({ error: '방문 정보를 찾을 수 없습니다.' });
+    }
+
+    if (visit.check_out) {
+      return res.status(400).json({ error: '이미 체크아웃된 방문입니다.' });
+    }
+
+    // 체크아웃 시간 계산 (현재 시간 기준)
+    const checkOutTime = new Date();
+    const checkInTime = new Date(visit.check_in);
+    const duration_minutes = Math.floor((checkOutTime - checkInTime) / 1000 / 60);
+
+    // 데이케어만 요금 계산
+    if (visit.visit_type === 'daycare') {
+      const feeInfo = calculateDaycareFee(visit.weight, duration_minutes);
+      return res.json({
+        success: true,
+        visit_type: 'daycare',
+        fee_info: feeInfo,
+        duration_minutes,
+        check_in: visit.check_in,
+        dog_name: visit.dog_name,
+        customer_name: visit.customer_name
+      });
+    } else {
+      // 호텔링은 요금 계산 안 함
+      return res.json({
+        success: true,
+        visit_type: 'hoteling',
+        fee_info: null,
+        duration_minutes,
+        check_in: visit.check_in,
+        dog_name: visit.dog_name,
+        customer_name: visit.customer_name
+      });
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: '요금 계산 중 오류가 발생했습니다.' });
+  }
+});
+
 // 체크아웃
 app.post('/api/checkout', (req, res) => {
   try {
@@ -291,7 +347,7 @@ app.get('/api/customers/:customerId/visits', (req, res) => {
 app.put('/api/customers/:customerId', (req, res) => {
   try {
     const { customerId } = req.params;
-    const { customer_name, phone, dog_name, breed, birth_date } = req.body;
+    const { customer_name, phone, dog_name, breed, birth_date, weight } = req.body;
     
     // 유효성 검사
     if (!customer_name || !phone || !dog_name || !breed || !birth_date) {
@@ -304,7 +360,7 @@ app.put('/api/customers/:customerId', (req, res) => {
       return res.status(404).json({ error: '고객을 찾을 수 없습니다.' });
     }
 
-    updateCustomer(customerId, customer_name, phone, dog_name, breed, birth_date);
+    updateCustomer(customerId, customer_name, phone, dog_name, breed, birth_date, weight || null);
     res.json({ 
       success: true, 
       message: '고객 정보가 수정되었습니다.'

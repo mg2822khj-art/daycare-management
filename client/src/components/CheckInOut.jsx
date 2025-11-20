@@ -16,6 +16,8 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
   const [isLoading, setIsLoading] = useState(false)
   const [editingVisit, setEditingVisit] = useState(null)
   const [editCheckInTime, setEditCheckInTime] = useState('')
+  const [checkoutConfirm, setCheckoutConfirm] = useState(null)
+  const [feeInfo, setFeeInfo] = useState(null)
   const autoCompleteRef = useRef(null)
 
   // 현재 타입의 방문만 필터링
@@ -133,11 +135,40 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
     setMessage({ type: '', text: '' })
 
     try {
+      // 데이케어인 경우 요금 계산
+      if (visit.visit_type === 'daycare') {
+        const response = await axios.post(`${API_URL}/checkout/calculate`, {
+          visit_id: visit.id
+        })
+        
+        if (response.data.success && response.data.fee_info) {
+          setCheckoutConfirm(visit)
+          setFeeInfo(response.data.fee_info)
+          setIsLoading(false)
+          return
+        }
+      }
+
+      // 호텔링이거나 요금 계산이 필요 없는 경우 바로 체크아웃
+      await confirmCheckout(visit.id)
+    } catch (error) {
+      setMessage({
+        type: 'error',
+        text: error.response?.data?.error || '체크아웃 중 오류가 발생했습니다.'
+      })
+      setIsLoading(false)
+    }
+  }
+
+  const confirmCheckout = async (visit_id) => {
+    try {
       const response = await axios.post(`${API_URL}/checkout`, {
-        visit_id: visit.id
+        visit_id: visit_id
       })
 
       setMessage({ type: 'success', text: response.data.message })
+      setCheckoutConfirm(null)
+      setFeeInfo(null)
       onRefresh()
     } catch (error) {
       setMessage({
@@ -147,6 +178,12 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const cancelCheckout = () => {
+    setCheckoutConfirm(null)
+    setFeeInfo(null)
+    setIsLoading(false)
   }
 
   const handleEditCheckInTime = (visit) => {
@@ -551,6 +588,106 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
                 }}
               >
                 {isLoading ? '저장 중...' : '저장'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 체크아웃 확인 모달 (데이케어 요금 계산) */}
+      {checkoutConfirm && feeInfo && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 2000
+        }} onClick={cancelCheckout}>
+          <div style={{
+            background: 'white',
+            padding: '30px',
+            borderRadius: '12px',
+            maxWidth: '500px',
+            width: '90%',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+          }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ marginBottom: '20px', color: '#333' }}>
+              💰 체크아웃 요금 안내
+            </h3>
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ marginBottom: '15px', padding: '15px', background: '#f8f9fa', borderRadius: '8px' }}>
+                <div style={{ marginBottom: '10px', fontSize: '1.1rem', fontWeight: '600', color: '#333' }}>
+                  🐕 {checkoutConfirm.dog_name}
+                </div>
+                <div style={{ fontSize: '0.9rem', color: '#666' }}>
+                  몸무게: {feeInfo.weight ? `${feeInfo.weight}kg` : '정보 없음'}
+                </div>
+                <div style={{ fontSize: '0.9rem', color: '#666' }}>
+                  이용 시간: {Math.floor(feeInfo.duration_minutes / 60)}시간 {feeInfo.duration_minutes % 60}분
+                </div>
+              </div>
+
+              {feeInfo.fee > 0 ? (
+                <div style={{ padding: '20px', background: '#e8f5e9', borderRadius: '8px', marginBottom: '15px' }}>
+                  <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '8px' }}>
+                    요금 계산
+                  </div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: '600', color: '#2e7d32', marginBottom: '5px' }}>
+                    {feeInfo.fee.toLocaleString()}원
+                  </div>
+                  <div style={{ fontSize: '0.85rem', color: '#666' }}>
+                    {feeInfo.units}개 단위 × {feeInfo.pricePer30min.toLocaleString()}원/30분
+                  </div>
+                  {feeInfo.duration_minutes % 30 > 0 && (
+                    <div style={{ fontSize: '0.85rem', color: '#999', marginTop: '5px' }}>
+                      (미달 시간 {feeInfo.duration_minutes % 30}분은 계산되지 않음)
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ padding: '20px', background: '#fff3cd', borderRadius: '8px', marginBottom: '15px' }}>
+                  <div style={{ fontSize: '0.9rem', color: '#856404' }}>
+                    {feeInfo.message || '요금 계산 정보가 없습니다.'}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={cancelCheckout}
+                disabled={isLoading}
+                style={{
+                  padding: '10px 20px',
+                  background: '#6c757d',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '1rem'
+                }}
+              >
+                취소
+              </button>
+              <button
+                onClick={() => confirmCheckout(checkoutConfirm.id)}
+                disabled={isLoading}
+                style={{
+                  padding: '10px 20px',
+                  background: '#667eea',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '1rem',
+                  fontWeight: '600'
+                }}
+              >
+                {isLoading ? '처리 중...' : '확인 및 체크아웃'}
               </button>
             </div>
           </div>

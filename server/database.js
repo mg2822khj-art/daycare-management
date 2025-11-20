@@ -61,6 +61,17 @@ try {
       console.log('⚠️ customers 테이블에 deleted_at 컬럼이 없습니다.');
       needRecreate = true;
     }
+    // weight 컬럼 확인 및 추가
+    if (createSQL && !createSQL.includes('weight')) {
+      console.log('⚠️ customers 테이블에 weight 컬럼이 없습니다. 추가합니다...');
+      try {
+        db.run('ALTER TABLE customers ADD COLUMN weight REAL DEFAULT NULL');
+        saveDatabase();
+        console.log('✅ weight 컬럼 추가 완료');
+      } catch (e) {
+        console.log('weight 컬럼 추가 중 오류 (무시됨):', e.message);
+      }
+    }
   }
   
   // visits 테이블에 visit_type 컬럼이 있는지 확인
@@ -97,6 +108,7 @@ db.run(`
     dog_name TEXT NOT NULL,
     breed TEXT NOT NULL,
     birth_date TEXT NOT NULL,
+    weight REAL DEFAULT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     deleted_at DATETIME DEFAULT NULL
   );
@@ -157,10 +169,10 @@ export function calculateAge(birth_date) {
   }
 }
 
-// 고객 등록 (birth_date 저장)
-export function createCustomer(customer_name, phone, dog_name, breed, birth_date) {
-  const stmt = db.prepare('INSERT INTO customers (customer_name, phone, dog_name, breed, birth_date) VALUES (?, ?, ?, ?, ?)');
-  stmt.bind([customer_name, phone, dog_name, breed, birth_date]);
+// 고객 등록 (birth_date, weight 저장)
+export function createCustomer(customer_name, phone, dog_name, breed, birth_date, weight = null) {
+  const stmt = db.prepare('INSERT INTO customers (customer_name, phone, dog_name, breed, birth_date, weight) VALUES (?, ?, ?, ?, ?, ?)');
+  stmt.bind([customer_name, phone, dog_name, breed, birth_date, weight]);
   stmt.step();
   stmt.free();
   saveDatabase();
@@ -169,9 +181,9 @@ export function createCustomer(customer_name, phone, dog_name, breed, birth_date
 }
 
 // 고객 정보 수정
-export function updateCustomer(customer_id, customer_name, phone, dog_name, breed, birth_date) {
-  const stmt = db.prepare('UPDATE customers SET customer_name = ?, phone = ?, dog_name = ?, breed = ?, birth_date = ? WHERE id = ?');
-  stmt.bind([customer_name, phone, dog_name, breed, birth_date, customer_id]);
+export function updateCustomer(customer_id, customer_name, phone, dog_name, breed, birth_date, weight = null) {
+  const stmt = db.prepare('UPDATE customers SET customer_name = ?, phone = ?, dog_name = ?, breed = ?, birth_date = ?, weight = ? WHERE id = ?');
+  stmt.bind([customer_name, phone, dog_name, breed, birth_date, weight, customer_id]);
   stmt.step();
   stmt.free();
   saveDatabase();
@@ -327,6 +339,53 @@ export function updateCheckInTime(visit_id, new_check_in_time) {
     console.error('체크인 시간 수정 오류:', error);
     return false;
   }
+}
+
+// 방문 정보 조회 (체크아웃 전)
+export function getVisitById(visit_id) {
+  try {
+    const stmt = db.prepare(`
+      SELECT v.*, c.weight, c.dog_name, c.customer_name
+      FROM visits v
+      JOIN customers c ON v.customer_id = c.id
+      WHERE v.id = ? AND v.deleted_at IS NULL AND c.deleted_at IS NULL
+    `);
+    stmt.bind([visit_id]);
+    const result = stmt.step() ? stmt.getAsObject() : null;
+    stmt.free();
+    return result;
+  } catch (error) {
+    console.error('방문 정보 조회 오류:', error);
+    return null;
+  }
+}
+
+// 데이케어 요금 계산 (30분 단위, 미달 시간은 계산 안 함)
+export function calculateDaycareFee(weight, duration_minutes) {
+  if (!weight || weight < 2) {
+    return { fee: 0, message: '몸무게 정보가 없거나 2kg 미만입니다.' };
+  }
+
+  let pricePer30min = 0;
+  if (weight >= 2 && weight <= 7) {
+    pricePer30min = 2500;
+  } else if (weight > 7 && weight <= 15) {
+    pricePer30min = 3000;
+  } else if (weight > 15) {
+    pricePer30min = 3500;
+  }
+
+  // 30분 단위로 계산 (미달 시간은 계산 안 함)
+  const units = Math.floor(duration_minutes / 30);
+  const fee = units * pricePer30min;
+
+  return {
+    fee,
+    units,
+    pricePer30min,
+    duration_minutes,
+    weight
+  };
 }
 
 // 체크아웃 (한국 시간 KST, UTC+9)

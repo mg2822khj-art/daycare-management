@@ -96,7 +96,8 @@ function CustomerRegistration({ onRegistered }) {
     dog_name: '',
     breed: '',
     age_years: '',
-    age_months: ''
+    age_months: '',
+    weight: ''
   })
   const [message, setMessage] = useState({ type: '', text: '' })
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -149,7 +150,8 @@ function CustomerRegistration({ onRegistered }) {
         phone: formData.phone,
         dog_name: formData.dog_name,
         breed: formData.breed,
-        birth_date: birth_date
+        birth_date: birth_date,
+        weight: formData.weight ? parseFloat(formData.weight) : null
       })
 
       setMessage({ type: 'success', text: response.data.message })
@@ -159,7 +161,8 @@ function CustomerRegistration({ onRegistered }) {
         dog_name: '',
         breed: '',
         age_years: '',
-        age_months: ''
+        age_months: '',
+        weight: ''
       })
       
       // 고객 목록 새로고침
@@ -318,6 +321,24 @@ function CustomerRegistration({ onRegistered }) {
           </div>
           <small style={{ color: '#666', fontSize: '0.85rem', marginTop: '5px', display: 'block' }}>
             예: 1살 3개월 → 1살 + 3개월
+          </small>
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="weight">몸무게 (kg)</label>
+          <input
+            type="number"
+            id="weight"
+            name="weight"
+            value={formData.weight}
+            onChange={handleChange}
+            min="0"
+            step="0.1"
+            placeholder="예: 5.5"
+            style={{ width: '100%' }}
+          />
+          <small style={{ color: '#666', fontSize: '0.85rem', marginTop: '5px', display: 'block' }}>
+            데이케어 요금 계산에 사용됩니다 (선택사항)
           </small>
         </div>
 

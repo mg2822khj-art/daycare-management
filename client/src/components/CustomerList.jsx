@@ -17,7 +17,8 @@ function CustomerList({ customers, onUpdate }) {
     dog_name: '',
     breed: '',
     age_years: '',
-    age_months: ''
+    age_months: '',
+    weight: ''
   })
 
   // 고객 검색 필터
@@ -63,7 +64,8 @@ function CustomerList({ customers, onUpdate }) {
       dog_name: selectedCustomer.dog_name,
       breed: selectedCustomer.breed,
       age_years: selectedCustomer.age_years || 0,
-      age_months: selectedCustomer.age_months || 0
+      age_months: selectedCustomer.age_months || 0,
+      weight: selectedCustomer.weight || ''
     })
     setIsEditing(true)
   }
@@ -94,7 +96,8 @@ function CustomerList({ customers, onUpdate }) {
         phone: editForm.phone,
         dog_name: editForm.dog_name,
         breed: editForm.breed,
-        birth_date: birth_date
+        birth_date: birth_date,
+        weight: editForm.weight ? parseFloat(editForm.weight) : null
       })
       alert('고객 정보가 수정되었습니다.')
       setIsEditing(false)
@@ -423,6 +426,22 @@ function CustomerList({ customers, onUpdate }) {
                         </small>
                       </div>
                     </div>
+                  </div>
+                  <div className="form-group" style={{ marginTop: '15px' }}>
+                    <label htmlFor="edit-weight">몸무게 (kg)</label>
+                    <input
+                      type="number"
+                      id="edit-weight"
+                      value={editForm.weight}
+                      onChange={(e) => setEditForm({ ...editForm, weight: e.target.value })}
+                      min="0"
+                      step="0.1"
+                      placeholder="예: 5.5"
+                      style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                    />
+                    <small style={{ color: '#666', fontSize: '0.85rem', marginTop: '5px', display: 'block' }}>
+                      데이케어 요금 계산에 사용됩니다 (선택사항)
+                    </small>
                   </div>
                   <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
                     <button
