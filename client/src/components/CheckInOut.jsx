@@ -19,7 +19,7 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
   // 현재 타입의 방문만 필터링
   const filteredVisits = currentVisits.filter(visit => visit.visit_type === visitType)
 
-  // 실시간 자동완성 검색
+  // 실시간 자동완성 검색 (즉시 반응)
   useEffect(() => {
     const searchAutoComplete = async () => {
       if (dogName.trim().length === 0) {
@@ -28,16 +28,26 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
         return
       }
 
+      // 최소 1글자 이상 입력 시 즉시 검색
+      if (dogName.trim().length < 1) {
+        setAutoCompleteResults([])
+        setShowAutoComplete(false)
+        return
+      }
+
       try {
-        const response = await axios.get(`${API_URL}/customers/autocomplete?q=${dogName.trim()}`)
+        const response = await axios.get(`${API_URL}/customers/autocomplete?q=${encodeURIComponent(dogName.trim())}`)
         setAutoCompleteResults(response.data)
         setShowAutoComplete(response.data.length > 0)
       } catch (error) {
         console.error('자동완성 검색 실패:', error)
+        setAutoCompleteResults([])
+        setShowAutoComplete(false)
       }
     }
 
-    const timeoutId = setTimeout(searchAutoComplete, 300)
+    // 딜레이를 줄여서 더 빠르게 반응 (150ms)
+    const timeoutId = setTimeout(searchAutoComplete, 150)
     return () => clearTimeout(timeoutId)
   }, [dogName])
 
@@ -80,17 +90,14 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
   const handleAutoCompleteSelect = (customer) => {
     setDogName(customer.dog_name)
     setShowAutoComplete(false)
-    axios.get(`${API_URL}/customers/search/${customer.dog_name}`)
-      .then(response => {
-        setSearchResults(response.data)
-        setShowResults(true)
-      })
-      .catch(error => {
-        setMessage({
-          type: 'error',
-          text: '검색 중 오류가 발생했습니다.'
-        })
-      })
+    setSearchResults([customer])
+    setShowResults(true)
+  }
+
+  const handleAutoCompleteCheckIn = async (customer, e) => {
+    e.stopPropagation() // 부모 클릭 이벤트 방지
+    setShowAutoComplete(false)
+    await handleCheckIn(customer)
   }
 
   const handleCheckIn = async (customer) => {
@@ -184,7 +191,10 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
               <input
                 type="text"
                 value={dogName}
-                onChange={(e) => setDogName(e.target.value)}
+                onChange={(e) => {
+                  setDogName(e.target.value)
+                  setShowResults(false) // 입력 시 검색 결과 숨김
+                }}
                 onFocus={() => {
                   if (autoCompleteResults.length > 0) {
                     setShowAutoComplete(true)
@@ -193,6 +203,7 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
                 placeholder="반려견 이름, 보호자 이름, 연락처를 입력하세요"
                 disabled={isLoading}
                 autoComplete="off"
+                style={{ width: '100%' }}
               />
               <button
                 type="submit"
@@ -203,7 +214,7 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
               </button>
             </div>
 
-            {/* 자동완성 드롭다운 */}
+            {/* 자동완성 드롭다운 - 스크롤 가능 */}
             {showAutoComplete && autoCompleteResults.length > 0 && (
               <div style={{
                 position: 'absolute',
@@ -214,32 +225,72 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
                 border: '2px solid #667eea',
                 borderRadius: '8px',
                 marginTop: '5px',
-                maxHeight: '300px',
+                maxHeight: '400px',
                 overflowY: 'auto',
+                overflowX: 'hidden',
                 boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                zIndex: 1000
+                zIndex: 1000,
+                WebkitOverflowScrolling: 'touch' // iOS 부드러운 스크롤
               }}>
                 {autoCompleteResults.map((customer) => (
                   <div
                     key={customer.id}
                     onClick={() => handleAutoCompleteSelect(customer)}
                     style={{
-                      padding: '12px 15px',
+                      padding: '15px',
                       cursor: 'pointer',
                       borderBottom: '1px solid #e0e0e0',
-                      transition: 'background 0.2s'
+                      transition: 'background 0.2s',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      background: 'white'
                     }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = '#f0f0f0'}
-                    onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = '#f8f9fa'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'white'
+                    }}
                   >
-                    <div style={{ fontWeight: '600', color: '#667eea', marginBottom: '4px' }}>
-                      🐕 {customer.dog_name}
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: '600', color: '#667eea', marginBottom: '6px', fontSize: '1rem' }}>
+                        🐕 {customer.dog_name}
+                      </div>
+                      <div style={{ fontSize: '0.85rem', color: '#666', lineHeight: '1.4' }}>
+                        <div>👤 {customer.customer_name}</div>
+                        <div>📞 {customer.phone}</div>
+                        <div>{customer.breed} | {customer.age_years}살 {customer.age_months}개월</div>
+                      </div>
                     </div>
-                    <div style={{ fontSize: '0.85rem', color: '#666' }}>
-                      {customer.customer_name} | {customer.phone} | {customer.breed} | {customer.age_years}살 {customer.age_months}개월
-                    </div>
+                    <button
+                      className="btn btn-success"
+                      onClick={(e) => handleAutoCompleteCheckIn(customer, e)}
+                      disabled={isLoading}
+                      style={{
+                        minWidth: '90px',
+                        padding: '8px 15px',
+                        fontSize: '0.85rem',
+                        marginLeft: '10px',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      {typeLabel} 체크인
+                    </button>
                   </div>
                 ))}
+                {autoCompleteResults.length > 5 && (
+                  <div style={{
+                    padding: '10px',
+                    textAlign: 'center',
+                    color: '#999',
+                    fontSize: '0.85rem',
+                    background: '#f8f9fa',
+                    borderTop: '1px solid #e0e0e0'
+                  }}>
+                    ⬆️⬇️ 스크롤하여 더 많은 결과 보기 ({autoCompleteResults.length}건)
+                  </div>
+                )}
               </div>
             )}
           </div>
