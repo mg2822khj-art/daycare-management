@@ -637,17 +637,21 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
                   <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '8px' }}>
                     요금 계산
                   </div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: '600', color: '#2e7d32', marginBottom: '5px' }}>
+                  <div style={{ fontSize: '1.2rem', fontWeight: '600', color: '#2e7d32', marginBottom: '10px' }}>
                     {feeInfo.fee.toLocaleString()}원
                   </div>
-                  <div style={{ fontSize: '0.85rem', color: '#666' }}>
-                    {feeInfo.units}개 단위 × {feeInfo.pricePer30min.toLocaleString()}원/30분
+                  <div style={{ fontSize: '0.85rem', color: '#666', lineHeight: '1.6' }}>
+                    {feeInfo.fullHours > 0 && (
+                      <div>
+                        {feeInfo.fullHours}시간 × {feeInfo.pricePerHour.toLocaleString()}원/시간 = {(feeInfo.fullHours * feeInfo.pricePerHour).toLocaleString()}원
+                      </div>
+                    )}
+                    {feeInfo.additionalFee > 0 && (
+                      <div style={{ marginTop: '5px' }}>
+                        + {feeInfo.additionalUnit} ({feeInfo.remainingMinutes}분) × {feeInfo.additionalUnit === '1시간' ? feeInfo.pricePerHour.toLocaleString() : feeInfo.pricePer30min.toLocaleString()}원 = {feeInfo.additionalFee.toLocaleString()}원
+                      </div>
+                    )}
                   </div>
-                  {feeInfo.duration_minutes % 30 > 0 && (
-                    <div style={{ fontSize: '0.85rem', color: '#999', marginTop: '5px' }}>
-                      (미달 시간 {feeInfo.duration_minutes % 30}분은 계산되지 않음)
-                    </div>
-                  )}
                 </div>
               ) : (
                 <div style={{ padding: '20px', background: '#fff3cd', borderRadius: '8px', marginBottom: '15px' }}>

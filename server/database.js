@@ -407,28 +407,56 @@ export function calculateDuration(check_in_time) {
   }
 }
 
-// 데이케어 요금 계산 (30분 단위, 미달 시간은 계산 안 함)
+// 데이케어 요금 계산 (1시간 단위, 남은 시간은 30분 기준)
 export function calculateDaycareFee(weight, duration_minutes) {
   if (!weight || weight < 2) {
     return { fee: 0, message: '몸무게 정보가 없거나 2kg 미만입니다.' };
   }
 
+  // 1시간당 요금 및 30분당 요금 설정
+  let pricePerHour = 0;
   let pricePer30min = 0;
   if (weight >= 2 && weight <= 7) {
+    pricePerHour = 5000;
     pricePer30min = 2500;
   } else if (weight > 7 && weight <= 15) {
+    pricePerHour = 6000;
     pricePer30min = 3000;
   } else if (weight > 15) {
+    pricePerHour = 7000;
     pricePer30min = 3500;
   }
 
-  // 30분 단위로 계산 (미달 시간은 계산 안 함)
-  const units = Math.floor(duration_minutes / 30);
-  const fee = units * pricePer30min;
+  // 1시간 단위로 계산
+  const fullHours = Math.floor(duration_minutes / 60);
+  const remainingMinutes = duration_minutes % 60;
+  
+  let fee = fullHours * pricePerHour;
+  let additionalFee = 0;
+  let additionalUnit = '';
+  
+  // 남은 시간 처리
+  if (remainingMinutes > 0) {
+    if (remainingMinutes < 30) {
+      // 30분 미만: 30분 요금만
+      additionalFee = pricePer30min;
+      additionalUnit = '30분';
+    } else {
+      // 30분 이상: 1시간 요금
+      additionalFee = pricePerHour;
+      additionalUnit = '1시간';
+    }
+  }
+  
+  fee += additionalFee;
 
   return {
     fee,
-    units,
+    fullHours,
+    remainingMinutes,
+    additionalFee,
+    additionalUnit,
+    pricePerHour,
     pricePer30min,
     duration_minutes,
     weight
