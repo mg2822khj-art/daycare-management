@@ -67,7 +67,7 @@ db.run(`
     phone TEXT NOT NULL,
     dog_name TEXT NOT NULL,
     breed TEXT NOT NULL,
-    age INTEGER NOT NULL,
+    birth_date TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     deleted_at DATETIME DEFAULT NULL
   );
@@ -92,10 +92,26 @@ db.run(`
 saveDatabase();
 console.log('✅ 데이터베이스 초기화 완료');
 
-// 고객 등록
-export function createCustomer(customer_name, phone, dog_name, breed, age) {
-  const stmt = db.prepare('INSERT INTO customers (customer_name, phone, dog_name, breed, age) VALUES (?, ?, ?, ?, ?)');
-  stmt.bind([customer_name, phone, dog_name, breed, age]);
+// 나이 계산 함수 (생년월일 기준)
+export function calculateAge(birth_date) {
+  const today = new Date();
+  const birth = new Date(birth_date);
+  
+  let years = today.getFullYear() - birth.getFullYear();
+  let months = today.getMonth() - birth.getMonth();
+  
+  if (months < 0) {
+    years--;
+    months += 12;
+  }
+  
+  return { years, months };
+}
+
+// 고객 등록 (birth_date 저장)
+export function createCustomer(customer_name, phone, dog_name, breed, birth_date) {
+  const stmt = db.prepare('INSERT INTO customers (customer_name, phone, dog_name, breed, birth_date) VALUES (?, ?, ?, ?, ?)');
+  stmt.bind([customer_name, phone, dog_name, breed, birth_date]);
   stmt.step();
   stmt.free();
   saveDatabase();
@@ -104,49 +120,67 @@ export function createCustomer(customer_name, phone, dog_name, breed, age) {
 }
 
 // 고객 정보 수정
-export function updateCustomer(customer_id, customer_name, phone, dog_name, breed, age) {
-  const stmt = db.prepare('UPDATE customers SET customer_name = ?, phone = ?, dog_name = ?, breed = ?, age = ? WHERE id = ?');
-  stmt.bind([customer_name, phone, dog_name, breed, age, customer_id]);
+export function updateCustomer(customer_id, customer_name, phone, dog_name, breed, birth_date) {
+  const stmt = db.prepare('UPDATE customers SET customer_name = ?, phone = ?, dog_name = ?, breed = ?, birth_date = ? WHERE id = ?');
+  stmt.bind([customer_name, phone, dog_name, breed, birth_date, customer_id]);
   stmt.step();
   stmt.free();
   saveDatabase();
 }
 
-// 반려견 이름으로 고객 조회 (정확히 일치, 삭제되지 않은 것만)
+// 반려견 이름으로 고객 조회 (정확히 일치, 삭제되지 않은 것만, 나이 자동 계산)
 export function findCustomersByDogName(dog_name) {
   const stmt = db.prepare('SELECT * FROM customers WHERE dog_name = ? AND deleted_at IS NULL');
   stmt.bind([dog_name]);
   const results = [];
   while (stmt.step()) {
-    results.push(stmt.getAsObject());
+    const customer = stmt.getAsObject();
+    if (customer.birth_date) {
+      const age = calculateAge(customer.birth_date);
+      customer.age_years = age.years;
+      customer.age_months = age.months;
+    }
+    results.push(customer);
   }
   stmt.free();
   return results;
 }
 
-// 반려견 이름으로 실시간 검색 (부분 일치, 삭제되지 않은 것만)
+// 반려견 이름, 보호자 이름, 연락처로 실시간 검색 (부분 일치, 삭제되지 않은 것만, 나이 자동 계산)
 export function searchCustomersByDogName(searchTerm) {
   if (!searchTerm) return [];
-  const stmt = db.prepare('SELECT * FROM customers WHERE dog_name LIKE ? AND deleted_at IS NULL ORDER BY dog_name LIMIT 20');
-  stmt.bind([`%${searchTerm}%`]);
+  const stmt = db.prepare('SELECT * FROM customers WHERE (dog_name LIKE ? OR customer_name LIKE ? OR phone LIKE ?) AND deleted_at IS NULL ORDER BY dog_name LIMIT 20');
+  const searchPattern = `%${searchTerm}%`;
+  stmt.bind([searchPattern, searchPattern, searchPattern]);
   const results = [];
   while (stmt.step()) {
-    results.push(stmt.getAsObject());
+    const customer = stmt.getAsObject();
+    if (customer.birth_date) {
+      const age = calculateAge(customer.birth_date);
+      customer.age_years = age.years;
+      customer.age_months = age.months;
+    }
+    results.push(customer);
   }
   stmt.free();
   return results;
 }
 
-// 고객 ID로 조회
+// 고객 ID로 조회 (나이 자동 계산)
 export function findCustomerById(id) {
   const stmt = db.prepare('SELECT * FROM customers WHERE id = ?');
   stmt.bind([id]);
   const result = stmt.step() ? stmt.getAsObject() : null;
   stmt.free();
+  if (result && result.birth_date) {
+    const age = calculateAge(result.birth_date);
+    result.age_years = age.years;
+    result.age_months = age.months;
+  }
   return result;
 }
 
-// 모든 고객 조회 (삭제되지 않은 것만)
+// 모든 고객 조회 (삭제되지 않은 것만, 나이 자동 계산)
 export function getAllCustomers() {
   const result = db.exec('SELECT * FROM customers WHERE deleted_at IS NULL ORDER BY created_at DESC');
   if (!result.length) return [];
@@ -154,6 +188,12 @@ export function getAllCustomers() {
   return result[0].values.map(row => {
     const obj = {};
     columns.forEach((col, idx) => { obj[col] = row[idx]; });
+    // 나이 자동 계산
+    if (obj.birth_date) {
+      const age = calculateAge(obj.birth_date);
+      obj.age_years = age.years;
+      obj.age_months = age.months;
+    }
     return obj;
   });
 }

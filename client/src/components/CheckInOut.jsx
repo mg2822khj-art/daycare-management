@@ -236,7 +236,7 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
                       🐕 {customer.dog_name}
                     </div>
                     <div style={{ fontSize: '0.85rem', color: '#666' }}>
-                      {customer.customer_name} | {customer.breed} | {customer.age}살
+                      {customer.customer_name} | {customer.breed} | {customer.age_years}살 {customer.age_months}개월
                     </div>
                   </div>
                 ))}
@@ -273,7 +273,7 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
                     <div style={{ fontSize: '0.9rem', color: '#666' }}>
                       보호자: {customer.customer_name} | 
                       견종: {customer.breed} | 
-                      나이: {customer.age}살 |
+                      나이: {customer.age_years}살 {customer.age_months}개월 |
                       연락처: {customer.phone}
                     </div>
                   </div>

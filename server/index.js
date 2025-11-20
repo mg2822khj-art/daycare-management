@@ -36,14 +36,14 @@ app.use(express.json());
 // 고객 등록
 app.post('/api/customers', (req, res) => {
   try {
-    const { customer_name, phone, dog_name, breed, age } = req.body;
+    const { customer_name, phone, dog_name, breed, birth_date } = req.body;
     
     // 유효성 검사
-    if (!customer_name || !phone || !dog_name || !breed || !age) {
+    if (!customer_name || !phone || !dog_name || !breed || !birth_date) {
       return res.status(400).json({ error: '모든 필드를 입력해주세요.' });
     }
 
-    const result = createCustomer(customer_name, phone, dog_name, breed, age);
+    const result = createCustomer(customer_name, phone, dog_name, breed, birth_date);
     res.json({ 
       success: true, 
       id: result.lastInsertRowid,
@@ -227,10 +227,10 @@ app.get('/api/customers/:customerId/visits', (req, res) => {
 app.put('/api/customers/:customerId', (req, res) => {
   try {
     const { customerId } = req.params;
-    const { customer_name, phone, dog_name, breed, age } = req.body;
+    const { customer_name, phone, dog_name, breed, birth_date } = req.body;
     
     // 유효성 검사
-    if (!customer_name || !phone || !dog_name || !breed || !age) {
+    if (!customer_name || !phone || !dog_name || !breed || !birth_date) {
       return res.status(400).json({ error: '모든 필드를 입력해주세요.' });
     }
 
@@ -240,7 +240,7 @@ app.put('/api/customers/:customerId', (req, res) => {
       return res.status(404).json({ error: '고객을 찾을 수 없습니다.' });
     }
 
-    updateCustomer(customerId, customer_name, phone, dog_name, breed, age);
+    updateCustomer(customerId, customer_name, phone, dog_name, breed, birth_date);
     res.json({ 
       success: true, 
       message: '고객 정보가 수정되었습니다.'

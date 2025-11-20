@@ -16,7 +16,8 @@ function CustomerList({ customers, onUpdate }) {
     phone: '',
     dog_name: '',
     breed: '',
-    age: ''
+    age_years: '',
+    age_months: ''
   })
 
   // 고객 검색 필터
@@ -61,7 +62,8 @@ function CustomerList({ customers, onUpdate }) {
       phone: selectedCustomer.phone,
       dog_name: selectedCustomer.dog_name,
       breed: selectedCustomer.breed,
-      age: selectedCustomer.age
+      age_years: selectedCustomer.age_years || 0,
+      age_months: selectedCustomer.age_months || 0
     })
     setIsEditing(true)
   }
@@ -73,18 +75,29 @@ function CustomerList({ customers, onUpdate }) {
 
   // 고객 정보 수정 저장
   const handleSaveEdit = async () => {
-    if (!editForm.customer_name || !editForm.phone || !editForm.dog_name || !editForm.breed || !editForm.age) {
+    if (!editForm.customer_name || !editForm.phone || !editForm.dog_name || !editForm.breed) {
       alert('모든 필드를 입력해주세요.')
       return
     }
 
     try {
-      await axios.put(`${API_URL}/customers/${selectedCustomer.id}`, editForm)
+      // 나이를 생년월일로 변환
+      const years = parseInt(editForm.age_years) || 0
+      const months = parseInt(editForm.age_months) || 0
+      
+      const today = new Date()
+      const birthDate = new Date(today.getFullYear() - years, today.getMonth() - months, today.getDate())
+      const birth_date = birthDate.toISOString().split('T')[0]
+
+      await axios.put(`${API_URL}/customers/${selectedCustomer.id}`, {
+        customer_name: editForm.customer_name,
+        phone: editForm.phone,
+        dog_name: editForm.dog_name,
+        breed: editForm.breed,
+        birth_date: birth_date
+      })
       alert('고객 정보가 수정되었습니다.')
       setIsEditing(false)
-      
-      // 선택된 고객 정보 업데이트
-      setSelectedCustomer({ ...selectedCustomer, ...editForm })
       
       // 부모 컴포넌트 새로고침
       if (onUpdate) {
@@ -180,7 +193,7 @@ function CustomerList({ customers, onUpdate }) {
       '보호자 이름': customer.customer_name,
       '연락처': customer.phone,
       '견종': customer.breed,
-      '나이': `${customer.age}살`,
+      '나이': `${customer.age_years}살 ${customer.age_months}개월`,
       '등록일': new Date(customer.created_at).toLocaleDateString('ko-KR')
     }))
 
@@ -289,7 +302,7 @@ function CustomerList({ customers, onUpdate }) {
                     <div><strong>보호자:</strong> {customer.customer_name}</div>
                     <div><strong>연락처:</strong> {customer.phone}</div>
                     <div><strong>견종:</strong> {customer.breed}</div>
-                    <div><strong>나이:</strong> {customer.age}살</div>
+                    <div><strong>나이:</strong> {customer.age_years}살 {customer.age_months}개월</div>
                     <div><strong>등록일:</strong> {new Date(customer.created_at).toLocaleDateString('ko-KR')}</div>
                   </div>
                   <div style={{ marginTop: '10px', color: '#667eea', fontSize: '0.9rem' }}>
@@ -382,14 +395,34 @@ function CustomerList({ customers, onUpdate }) {
                   </div>
                   <div>
                     <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>나이</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="30"
-                      value={editForm.age}
-                      onChange={(e) => setEditForm({ ...editForm, age: e.target.value })}
-                      style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
-                    />
+                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                      <div style={{ flex: 1 }}>
+                        <input
+                          type="number"
+                          min="0"
+                          max="30"
+                          value={editForm.age_years}
+                          onChange={(e) => setEditForm({ ...editForm, age_years: e.target.value })}
+                          style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
+                        />
+                        <small style={{ color: '#666', fontSize: '0.85rem', marginTop: '5px', display: 'block' }}>
+                          살
+                        </small>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <input
+                          type="number"
+                          min="0"
+                          max="11"
+                          value={editForm.age_months}
+                          onChange={(e) => setEditForm({ ...editForm, age_months: e.target.value })}
+                          style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
+                        />
+                        <small style={{ color: '#666', fontSize: '0.85rem', marginTop: '5px', display: 'block' }}>
+                          개월
+                        </small>
+                      </div>
+                    </div>
                   </div>
                   <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
                     <button
@@ -418,7 +451,7 @@ function CustomerList({ customers, onUpdate }) {
                   <div><strong>보호자:</strong> {selectedCustomer.customer_name}</div>
                   <div><strong>연락처:</strong> {selectedCustomer.phone}</div>
                   <div><strong>견종:</strong> {selectedCustomer.breed}</div>
-                  <div><strong>나이:</strong> {selectedCustomer.age}살</div>
+                  <div><strong>나이:</strong> {selectedCustomer.age_years}살 {selectedCustomer.age_months}개월</div>
                   <div><strong>등록일:</strong> {new Date(selectedCustomer.created_at).toLocaleDateString('ko-KR')}</div>
                 </div>
               )}
