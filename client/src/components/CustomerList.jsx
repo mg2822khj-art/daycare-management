@@ -287,20 +287,7 @@ function CustomerList({ customers, onUpdate }) {
                   onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
                   onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <h3 style={{ margin: 0 }}>🐕 {customer.dog_name}</h3>
-                    <button
-                      className="btn btn-danger"
-                      onClick={(e) => handleDeleteCustomer(customer, e)}
-                      style={{
-                        padding: '6px 12px',
-                        fontSize: '0.85rem',
-                        minWidth: 'auto'
-                      }}
-                    >
-                      🗑️ 삭제
-                    </button>
-                  </div>
+                  <h3 style={{ margin: 0 }}>🐕 {customer.dog_name}</h3>
                   <div className="customer-details" style={{ marginTop: '10px' }}>
                     <div><strong>보호자:</strong> {customer.customer_name}</div>
                     <div><strong>연락처:</strong> {customer.phone}</div>
@@ -443,20 +430,30 @@ function CustomerList({ customers, onUpdate }) {
                       데이케어 요금 계산에 사용됩니다 (선택사항)
                     </small>
                   </div>
-                  <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                  <div style={{ display: 'flex', gap: '10px', marginTop: '10px', flexWrap: 'wrap' }}>
                     <button
                       className="btn btn-success"
                       onClick={handleSaveEdit}
-                      style={{ flex: 1 }}
+                      style={{ flex: 1, minWidth: '100px' }}
                     >
                       💾 저장
                     </button>
                     <button
                       className="btn"
                       onClick={handleCancelEdit}
-                      style={{ flex: 1, background: '#6c757d', color: 'white' }}
+                      style={{ flex: 1, minWidth: '100px', background: '#6c757d', color: 'white' }}
                     >
                       취소
+                    </button>
+                    <button
+                      className="btn btn-danger"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDeleteCustomer(selectedCustomer, e)
+                      }}
+                      style={{ flex: 1, minWidth: '100px' }}
+                    >
+                      🗑️ 삭제
                     </button>
                   </div>
                 </div>
