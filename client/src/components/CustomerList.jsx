@@ -463,9 +463,9 @@ function CustomerList({ customers, onUpdate }) {
               ) : (
                 <div style={{ 
                   display: 'grid', 
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                  gridTemplateColumns: '1fr',
                   gap: '10px',
-                  fontSize: '1rem'
+                  fontSize: '0.9rem'
                 }}>
                   <div><strong>보호자:</strong> {selectedCustomer.customer_name}</div>
                   <div><strong>연락처:</strong> {selectedCustomer.phone}</div>

@@ -346,7 +346,7 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
                       e.currentTarget.style.background = 'white'
                     }}
                   >
-                    <div style={{ flex: 1 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: '600', color: '#667eea', marginBottom: '6px', fontSize: '1rem' }}>
                         🐕 {customer.dog_name}
                       </div>
@@ -362,10 +362,11 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
                       disabled={isLoading}
                       style={{
                         minWidth: '90px',
-                        padding: '8px 15px',
-                        fontSize: '0.85rem',
+                        padding: '8px 12px',
+                        fontSize: '0.8rem',
                         marginLeft: '10px',
-                        whiteSpace: 'nowrap'
+                        whiteSpace: 'nowrap',
+                        flexShrink: 0
                       }}
                     >
                       {typeLabel} 체크인
@@ -403,29 +404,29 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
                     padding: '15px',
                     borderRadius: '8px',
                     display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
+                    flexDirection: 'column',
+                    gap: '12px',
                     border: '2px solid #e0e0e0'
                   }}
                 >
-                  <div>
-                    <div style={{ marginBottom: '5px' }}>
-                      <strong style={{ fontSize: '1.1rem', color: '#667eea' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ marginBottom: '8px' }}>
+                      <strong style={{ fontSize: '1.1rem', color: '#667eea', display: 'block' }}>
                         {customer.dog_name}
                       </strong>
                     </div>
-                    <div style={{ fontSize: '0.9rem', color: '#666' }}>
-                      보호자: {customer.customer_name} | 
-                      견종: {customer.breed} | 
-                      나이: {customer.age_years}살 {customer.age_months}개월 |
-                      연락처: {customer.phone}
+                    <div style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.6' }}>
+                      <div>보호자: {customer.customer_name}</div>
+                      <div>견종: {customer.breed}</div>
+                      <div>나이: {customer.age_years}살 {customer.age_months}개월</div>
+                      <div>연락처: {customer.phone}</div>
                     </div>
                   </div>
                   <button
                     className="btn btn-success"
                     onClick={() => handleCheckIn(customer)}
                     disabled={isLoading}
-                    style={{ minWidth: '100px' }}
+                    style={{ width: '100%' }}
                   >
                     {typeLabel} 체크인
                   </button>
@@ -471,13 +472,18 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
                       {typeEmoji} {typeLabel}
                     </span>
                   </div>
-                  <small>
-                    보호자: {visit.customer_name} | 
-                    체크인: {formatDateTime(visit.check_in)} | 
-                    경과시간: {getElapsedTime(visit.check_in)}
+                  <small style={{ display: 'block', lineHeight: '1.6' }}>
+                    <div>보호자: {visit.customer_name}</div>
+                    <div>체크인: {formatDateTime(visit.check_in)}</div>
+                    <div>경과시간: {getElapsedTime(visit.check_in)}</div>
                   </small>
                 </div>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <div style={{ 
+                  display: 'flex', 
+                  flexDirection: 'column',
+                  gap: '8px', 
+                  width: '100%'
+                }}>
                   <button
                     className="btn"
                     onClick={() => handleEditCheckInTime(visit)}
@@ -486,10 +492,11 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
                       background: '#6c757d',
                       color: 'white',
                       border: 'none',
-                      padding: '8px 15px',
+                      padding: '10px 15px',
                       borderRadius: '6px',
                       cursor: 'pointer',
-                      fontSize: '0.9rem'
+                      fontSize: '0.9rem',
+                      width: '100%'
                     }}
                   >
                     ⏰ 시간 수정
@@ -498,6 +505,7 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
                     className="btn btn-danger"
                     onClick={() => handleCheckOut(visit)}
                     disabled={isLoading}
+                    style={{ width: '100%' }}
                   >
                     체크아웃
                   </button>

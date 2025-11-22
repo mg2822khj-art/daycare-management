@@ -93,9 +93,15 @@ body {
 .card {
   background: white;
   border-radius: 15px;
-  padding: 30px;
+  padding: 20px;
   box-shadow: 0 10px 30px rgba(0,0,0,0.2);
   margin-bottom: 20px;
+}
+
+@media (min-width: 768px) {
+  .card {
+    padding: 30px;
+  }
 }
 
 .form-group {
@@ -126,13 +132,22 @@ body {
 }
 
 .btn {
-  padding: 12px 30px;
-  font-size: 1rem;
+  padding: 12px 20px;
+  font-size: 0.9rem;
   border: none;
   border-radius: 8px;
   cursor: pointer;
   font-weight: 600;
   transition: all 0.3s ease;
+  width: 100%;
+}
+
+@media (min-width: 768px) {
+  .btn {
+    padding: 12px 30px;
+    font-size: 1rem;
+    width: auto;
+  }
 }
 
 .btn-primary {
@@ -192,8 +207,15 @@ body {
 
 .checkin-input-group {
   display: flex;
+  flex-direction: column;
   gap: 10px;
   margin-bottom: 20px;
+}
+
+@media (min-width: 768px) {
+  .checkin-input-group {
+    flex-direction: row;
+  }
 }
 
 .checkin-input-group input {
@@ -224,22 +246,60 @@ body {
   border-radius: 8px;
   margin-bottom: 10px;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  gap: 12px;
+}
+
+@media (min-width: 768px) {
+  .visit-item {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
 }
 
 .visit-info {
   flex: 1;
+  width: 100%;
+}
+
+.visit-info > div {
+  margin-bottom: 8px;
 }
 
 .visit-info strong {
   font-size: 1.1rem;
   color: #667eea;
   margin-right: 10px;
+  display: block;
+  margin-bottom: 5px;
 }
 
 .visit-info small {
   color: #666;
+  display: block;
+  line-height: 1.6;
+  font-size: 0.85rem;
+}
+
+@media (min-width: 768px) {
+  .visit-info strong {
+    display: inline;
+    margin-bottom: 0;
+  }
+  
+  .visit-info small {
+    font-size: 0.9rem;
+  }
+  
+  .visit-item > div:last-child {
+    flex-direction: row !important;
+    width: auto !important;
+  }
+  
+  .visit-item > div:last-child button {
+    width: auto !important;
+  }
 }
 
 .customer-list {
@@ -261,9 +321,18 @@ body {
 
 .customer-details {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 10px;
+  grid-template-columns: 1fr;
+  gap: 8px;
   color: #666;
+  font-size: 0.9rem;
+}
+
+@media (min-width: 768px) {
+  .customer-details {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px;
+    font-size: 1rem;
+  }
 }
 
 .history-table {
