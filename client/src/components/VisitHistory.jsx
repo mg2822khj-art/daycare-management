@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
+import * as XLSX from 'xlsx'
 
 const API_URL = '/api' // 상대 경로 사용 (모바일 지원)
 
@@ -119,6 +120,104 @@ function VisitHistory() {
     }
   }
 
+  // 고객별 방문기록 엑셀 내보내기
+  const handleExportToExcel = () => {
+    if (history.length === 0) {
+      alert('내보낼 방문 기록이 없습니다.')
+      return
+    }
+
+    // 고객별로 그룹화
+    const groupedByCustomer = {}
+    history.forEach(visit => {
+      const key = `${visit.customer_name}_${visit.dog_name}`
+      if (!groupedByCustomer[key]) {
+        groupedByCustomer[key] = {
+          customer_name: visit.customer_name,
+          dog_name: visit.dog_name,
+          breed: visit.breed,
+          phone: visit.phone,
+          visits: []
+        }
+      }
+      groupedByCustomer[key].visits.push(visit)
+    })
+
+    // 엑셀 데이터 생성
+    const excelData = []
+    
+    // 헤더 행
+    excelData.push([
+      '반려견명',
+      '견종',
+      '보호자명',
+      '연락처',
+      '방문타입',
+      '체크인',
+      '체크아웃',
+      '이용시간',
+      '방문횟수',
+      '총 이용시간'
+    ])
+
+    // 고객별 데이터 추가
+    Object.values(groupedByCustomer).forEach(customer => {
+      const totalVisits = customer.visits.length
+      const totalMinutes = customer.visits.reduce((sum, v) => sum + (v.duration_minutes || 0), 0)
+      
+      // 첫 번째 방문 기록
+      customer.visits.forEach((visit, index) => {
+        const visitTypeLabel = visit.visit_type === 'daycare' ? '데이케어' : '호텔링'
+        
+        excelData.push([
+          index === 0 ? customer.dog_name : '',
+          index === 0 ? customer.breed : '',
+          index === 0 ? customer.customer_name : '',
+          index === 0 ? customer.phone : '',
+          visitTypeLabel,
+          formatDateTime(visit.check_in),
+          formatDateTime(visit.check_out),
+          formatDuration(visit.duration_minutes),
+          index === 0 ? `${totalVisits}회` : '',
+          index === 0 ? formatDuration(totalMinutes) : ''
+        ])
+      })
+      
+      // 고객 간 구분선 (빈 행)
+      excelData.push([])
+    })
+
+    // 워크북 생성
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.aoa_to_sheet(excelData)
+
+    // 컬럼 너비 설정
+    ws['!cols'] = [
+      { wch: 12 }, // 반려견명
+      { wch: 12 }, // 견종
+      { wch: 10 }, // 보호자명
+      { wch: 15 }, // 연락처
+      { wch: 10 }, // 방문타입
+      { wch: 14 }, // 체크인
+      { wch: 14 }, // 체크아웃
+      { wch: 12 }, // 이용시간
+      { wch: 10 }, // 방문횟수
+      { wch: 12 }  // 총 이용시간
+    ]
+
+    XLSX.utils.book_append_sheet(wb, ws, '고객별 방문기록')
+
+    // 파일명 생성
+    const today = new Date()
+    const dateStr = today.toISOString().split('T')[0]
+    const fileName = selectedDate 
+      ? `방문기록_${selectedDate}.xlsx`
+      : `방문기록_전체_${dateStr}.xlsx`
+
+    // 파일 다운로드
+    XLSX.writeFile(wb, fileName)
+  }
+
   return (
     <div className="card">
       <div style={{ marginBottom: '20px' }}>
@@ -166,6 +265,20 @@ function VisitHistory() {
             }}
           >
             전체 보기
+          </button>
+          <button
+            className="btn"
+            onClick={handleExportToExcel}
+            disabled={history.length === 0}
+            style={{ 
+              padding: '10px 20px',
+              background: '#28a745',
+              color: 'white',
+              opacity: history.length === 0 ? 0.5 : 1,
+              cursor: history.length === 0 ? 'not-allowed' : 'pointer'
+            }}
+          >
+            📊 엑셀 다운로드 (고객별)
           </button>
         </div>
 
