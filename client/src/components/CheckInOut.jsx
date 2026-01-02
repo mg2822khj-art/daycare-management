@@ -20,10 +20,48 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
   const [feeInfo, setFeeInfo] = useState(null)
   const [prepaid, setPrepaid] = useState(false)
   const [prepaidAmount, setPrepaidAmount] = useState('')
+  const [todayReservations, setTodayReservations] = useState([])
+  const [showReservationModal, setShowReservationModal] = useState(false)
+  const [showCheckInModal, setShowCheckInModal] = useState(false)
+  const [selectedReservation, setSelectedReservation] = useState(null)
+  const [reservationForm, setReservationForm] = useState({
+    customer_id: '',
+    customer_name: '',
+    dog_name: '',
+    start_date: '',
+    end_date: '',
+    notes: ''
+  })
   const autoCompleteRef = useRef(null)
 
   // 현재 타입의 방문만 필터링
   const filteredVisits = currentVisits.filter(visit => visit.visit_type === visitType)
+
+  // 호텔링일 때 오늘의 예약 불러오기
+  useEffect(() => {
+    if (visitType === 'hoteling') {
+      fetchTodayReservations()
+    }
+  }, [visitType])
+
+  const fetchTodayReservations = async () => {
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      const response = await axios.get(`${API_URL}/reservations`, {
+        params: { date: today }
+      })
+      setTodayReservations(response.data)
+    } catch (error) {
+      console.error('예약 조회 실패:', error)
+    }
+  }
+
+  // 체크인 상태 확인
+  const isCheckedIn = (customerId) => {
+    return currentVisits.some(visit => 
+      visit.customer_id === customerId && visit.visit_type === 'hoteling'
+    )
+  }
 
   // 실시간 자동완성 검색 (즉시 반응)
   useEffect(() => {
@@ -132,6 +170,9 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
       setPrepaid(false)
       setPrepaidAmount('')
       onRefresh()
+      if (visitType === 'hoteling') {
+        fetchTodayReservations() // 예약 목록 새로고침
+      }
     } catch (error) {
       setMessage({
         type: 'error',
@@ -140,6 +181,112 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  // 예약에서 체크인
+  const handleReservationCheckIn = (reservation) => {
+    setSelectedReservation(reservation)
+    setPrepaid(false)
+    setPrepaidAmount('')
+    setShowCheckInModal(true)
+  }
+
+  // 예약 체크인 확인
+  const handleConfirmReservationCheckIn = async () => {
+    if (!selectedReservation) return
+
+    try {
+      const checkInData = {
+        customer_id: selectedReservation.customer_id,
+        visit_type: 'hoteling'
+      }
+
+      if (prepaid) {
+        checkInData.prepaid = true
+        checkInData.prepaid_amount = parseFloat(prepaidAmount) || 0
+      }
+
+      await axios.post(`${API_URL}/checkin`, checkInData)
+      
+      setMessage({ type: 'success', text: `${selectedReservation.dog_name} 체크인 완료!` })
+      setShowCheckInModal(false)
+      setSelectedReservation(null)
+      setPrepaid(false)
+      setPrepaidAmount('')
+      onRefresh()
+      fetchTodayReservations()
+    } catch (error) {
+      alert(error.response?.data?.error || '체크인 중 오류가 발생했습니다.')
+    }
+  }
+
+  // 예약 추가 모달 열기
+  const handleAddReservation = () => {
+    const today = new Date().toISOString().split('T')[0]
+    setReservationForm({
+      customer_id: '',
+      customer_name: '',
+      dog_name: '',
+      start_date: today,
+      end_date: today,
+      notes: ''
+    })
+    setDogName('')
+    setSearchResults([])
+    setShowReservationModal(true)
+  }
+
+  // 예약 추가
+  const handleCreateReservation = async (e) => {
+    e.preventDefault()
+    
+    if (!reservationForm.customer_id) {
+      alert('고객을 선택해주세요.')
+      return
+    }
+
+    try {
+      await axios.post(`${API_URL}/reservations`, {
+        customer_id: reservationForm.customer_id,
+        start_date: reservationForm.start_date,
+        end_date: reservationForm.end_date,
+        notes: reservationForm.notes
+      })
+      
+      setMessage({ type: 'success', text: '예약이 등록되었습니다.' })
+      setShowReservationModal(false)
+      fetchTodayReservations()
+    } catch (error) {
+      alert(error.response?.data?.error || '예약 등록 중 오류가 발생했습니다.')
+    }
+  }
+
+  // 예약 삭제
+  const handleDeleteReservation = async (reservationId, dogName) => {
+    if (!window.confirm(`"${dogName}"의 예약을 삭제하시겠습니까?`)) {
+      return
+    }
+
+    try {
+      await axios.delete(`${API_URL}/reservations/${reservationId}`)
+      setMessage({ type: 'success', text: '예약이 삭제되었습니다.' })
+      fetchTodayReservations()
+    } catch (error) {
+      alert(error.response?.data?.error || '예약 삭제 중 오류가 발생했습니다.')
+    }
+  }
+
+  // 예약 폼에서 고객 선택
+  const handleSelectCustomerForReservation = (customer) => {
+    setReservationForm({
+      ...reservationForm,
+      customer_id: customer.id,
+      customer_name: customer.customer_name,
+      dog_name: customer.dog_name
+    })
+    setDogName(`${customer.dog_name} (${customer.customer_name})`)
+    setSearchResults([])
+    setShowAutoComplete(false)
   }
 
   const handleCheckOut = async (visit) => {
@@ -509,6 +656,104 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
         </p>
       </div>
 
+      {/* 호텔링 예약 목록 */}
+      {visitType === 'hoteling' && (
+        <div className="card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <h2 style={{ color: '#333', margin: 0 }}>
+              📅 오늘의 예약 ({todayReservations.length}건)
+            </h2>
+            <button
+              className="btn btn-primary"
+              onClick={handleAddReservation}
+              style={{ padding: '10px 20px' }}
+            >
+              ➕ 예약 추가
+            </button>
+          </div>
+
+          {todayReservations.length === 0 ? (
+            <div className="empty-state">
+              <p>오늘 예약이 없습니다.</p>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gap: '10px' }}>
+              {todayReservations.map((reservation) => {
+                const checkedIn = isCheckedIn(reservation.customer_id)
+                return (
+                  <div
+                    key={reservation.id}
+                    style={{
+                      padding: '15px',
+                      background: checkedIn ? '#e7ffe7' : '#f8f9fa',
+                      borderRadius: '8px',
+                      border: `2px solid ${checkedIn ? '#28a745' : '#667eea'}`
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '5px' }}>
+                          🐕 {reservation.dog_name}
+                          {checkedIn && (
+                            <span style={{
+                              marginLeft: '10px',
+                              background: '#28a745',
+                              color: 'white',
+                              padding: '4px 12px',
+                              borderRadius: '12px',
+                              fontSize: '0.85rem'
+                            }}>
+                              체크인 중
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.6' }}>
+                          <div>보호자: {reservation.customer_name}</div>
+                          <div>견종: {reservation.breed}</div>
+                          <div>연락처: {reservation.phone}</div>
+                          <div style={{ color: '#667eea', fontWeight: '600' }}>
+                            기간: {new Date(reservation.start_date).toLocaleDateString('ko-KR')} ~ {new Date(reservation.end_date).toLocaleDateString('ko-KR')}
+                          </div>
+                          {reservation.notes && (
+                            <div style={{ 
+                              marginTop: '8px',
+                              padding: '8px',
+                              background: 'white',
+                              borderRadius: '4px',
+                              fontSize: '0.85rem'
+                            }}>
+                              📝 {reservation.notes}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                      {!checkedIn && (
+                        <button
+                          className="btn btn-success"
+                          onClick={() => handleReservationCheckIn(reservation)}
+                          style={{ flex: 1, padding: '10px' }}
+                        >
+                          🏠 체크인
+                        </button>
+                      )}
+                      <button
+                        className="btn btn-danger"
+                        onClick={() => handleDeleteReservation(reservation.id, reservation.dog_name)}
+                        style={{ flex: checkedIn ? 1 : 0, padding: '10px' }}
+                      >
+                        🗑️ {checkedIn ? '예약 삭제' : '삭제'}
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="card">
         <h2 style={{ marginBottom: '20px', color: '#333' }}>
           {typeEmoji} 현재 {typeLabel} 체크인 중 ({filteredVisits.length}마리)
@@ -867,6 +1112,202 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
                 }}
               >
                 {isLoading ? '처리 중...' : '확인 및 체크아웃'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 예약 추가 모달 */}
+      {showReservationModal && (
+        <div className="modal-overlay" onClick={() => setShowReservationModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ marginBottom: '20px' }}>호텔링 예약 추가</h3>
+            
+            <form onSubmit={handleCreateReservation}>
+              {/* 고객 검색 */}
+              <div className="form-group">
+                <label>고객 검색 *</label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="text"
+                    placeholder="반려견 이름, 보호자명, 연락처로 검색"
+                    value={dogName}
+                    onChange={(e) => setDogName(e.target.value)}
+                    className="form-input"
+                  />
+                  
+                  {showAutoComplete && autoCompleteResults.length > 0 && (
+                    <div className="search-results">
+                      {autoCompleteResults.map((customer) => (
+                        <div
+                          key={customer.id}
+                          className="search-result-item"
+                          onClick={() => handleSelectCustomerForReservation(customer)}
+                        >
+                          <strong>{customer.dog_name}</strong> ({customer.breed})
+                          <br />
+                          <small>{customer.customer_name} - {customer.phone}</small>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 체크인 날짜 */}
+              <div className="form-group">
+                <label>체크인 날짜 *</label>
+                <input
+                  type="date"
+                  value={reservationForm.start_date}
+                  onChange={(e) => setReservationForm({ ...reservationForm, start_date: e.target.value })}
+                  className="form-input"
+                  required
+                />
+              </div>
+
+              {/* 체크아웃 날짜 */}
+              <div className="form-group">
+                <label>체크아웃 날짜 *</label>
+                <input
+                  type="date"
+                  value={reservationForm.end_date}
+                  onChange={(e) => setReservationForm({ ...reservationForm, end_date: e.target.value })}
+                  className="form-input"
+                  required
+                />
+              </div>
+
+              {/* 메모 */}
+              <div className="form-group">
+                <label>메모</label>
+                <textarea
+                  value={reservationForm.notes}
+                  onChange={(e) => setReservationForm({ ...reservationForm, notes: e.target.value })}
+                  className="form-input"
+                  rows="3"
+                  placeholder="특이사항이나 메모를 입력하세요"
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+                <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>
+                  예약 등록
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setShowReservationModal(false)}
+                  style={{ flex: 1, background: '#6c757d', color: 'white' }}
+                >
+                  취소
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 예약 체크인 모달 */}
+      {showCheckInModal && selectedReservation && (
+        <div className="modal-overlay" onClick={() => setShowCheckInModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ marginBottom: '20px' }}>호텔링 체크인</h3>
+            
+            <div style={{ 
+              padding: '15px',
+              background: '#f8f9fa',
+              borderRadius: '8px',
+              marginBottom: '20px'
+            }}>
+              <div style={{ fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '8px' }}>
+                🐕 {selectedReservation.dog_name}
+              </div>
+              <div style={{ color: '#666', fontSize: '0.9rem' }}>
+                보호자: {selectedReservation.customer_name}
+              </div>
+              <div style={{ color: '#666', fontSize: '0.9rem' }}>
+                견종: {selectedReservation.breed}
+              </div>
+            </div>
+
+            <div style={{ 
+              padding: '15px', 
+              background: 'white', 
+              borderRadius: '8px',
+              border: '2px solid #e0e0e0',
+              marginBottom: '20px'
+            }}>
+              <label style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '10px',
+                cursor: 'pointer',
+                marginBottom: prepaid ? '15px' : '0'
+              }}>
+                <input
+                  type="checkbox"
+                  checked={prepaid}
+                  onChange={(e) => {
+                    setPrepaid(e.target.checked)
+                    if (!e.target.checked) {
+                      setPrepaidAmount('')
+                    }
+                  }}
+                  style={{
+                    width: '20px',
+                    height: '20px',
+                    cursor: 'pointer'
+                  }}
+                />
+                <span style={{ fontWeight: '600', color: '#333', fontSize: '1rem' }}>
+                  💰 선결제
+                </span>
+              </label>
+
+              {prepaid && (
+                <div>
+                  <label style={{ 
+                    display: 'block', 
+                    marginBottom: '8px',
+                    fontWeight: '500',
+                    color: '#666'
+                  }}>
+                    선결제 금액
+                  </label>
+                  <input
+                    type="number"
+                    value={prepaidAmount}
+                    onChange={(e) => setPrepaidAmount(e.target.value)}
+                    placeholder="금액을 입력하세요 (원)"
+                    className="form-input"
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      border: '2px solid #667eea',
+                      borderRadius: '8px',
+                      fontSize: '1rem'
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                className="btn btn-success"
+                onClick={handleConfirmReservationCheckIn}
+                style={{ flex: 1 }}
+              >
+                체크인 완료
+              </button>
+              <button
+                className="btn"
+                onClick={() => setShowCheckInModal(false)}
+                style={{ flex: 1, background: '#6c757d', color: 'white' }}
+              >
+                취소
               </button>
             </div>
           </div>
