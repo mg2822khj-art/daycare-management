@@ -234,6 +234,8 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
     })
     setDogName('')
     setSearchResults([])
+    setAutoCompleteResults([])
+    setShowAutoComplete(false)
     setShowReservationModal(true)
   }
 
@@ -256,6 +258,9 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
       
       setMessage({ type: 'success', text: '예약이 등록되었습니다.' })
       setShowReservationModal(false)
+      setShowAutoComplete(false)
+      setAutoCompleteResults([])
+      setDogName('')
       fetchTodayReservations()
     } catch (error) {
       alert(error.response?.data?.error || '예약 등록 중 오류가 발생했습니다.')
@@ -285,8 +290,9 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
       customer_name: customer.customer_name,
       dog_name: customer.dog_name
     })
-    setDogName(`${customer.dog_name} (${customer.customer_name})`)
+    setDogName('')  // 선택 후 입력 필드 초기화
     setSearchResults([])
+    setAutoCompleteResults([])
     setShowAutoComplete(false)
   }
 
@@ -1189,7 +1195,12 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
 
       {/* 예약 추가 모달 */}
       {showReservationModal && (
-        <div className="modal-overlay" onClick={() => setShowReservationModal(false)}>
+        <div className="modal-overlay" onClick={() => {
+          setShowReservationModal(false)
+          setShowAutoComplete(false)
+          setAutoCompleteResults([])
+          setDogName('')
+        }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h3 style={{ marginBottom: '20px' }}>호텔링 예약 추가</h3>
             
@@ -1203,25 +1214,70 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
                     placeholder="반려견 이름, 보호자명, 연락처로 검색"
                     value={dogName}
                     onChange={(e) => setDogName(e.target.value)}
+                    onFocus={() => {
+                      if (autoCompleteResults.length > 0) {
+                        setShowAutoComplete(true)
+                      }
+                    }}
                     className="form-input"
+                    autoComplete="off"
                   />
                   
                   {showAutoComplete && autoCompleteResults.length > 0 && (
-                    <div className="search-results">
+                    <div style={{
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      right: 0,
+                      background: 'white',
+                      border: '2px solid #667eea',
+                      borderRadius: '8px',
+                      marginTop: '5px',
+                      maxHeight: '300px',
+                      overflowY: 'auto',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                      zIndex: 1000
+                    }}>
                       {autoCompleteResults.map((customer) => (
                         <div
                           key={customer.id}
-                          className="search-result-item"
                           onClick={() => handleSelectCustomerForReservation(customer)}
+                          style={{
+                            padding: '12px 15px',
+                            cursor: 'pointer',
+                            borderBottom: '1px solid #e0e0e0',
+                            transition: 'background 0.2s'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = '#f8f9fa'
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'white'
+                          }}
                         >
-                          <strong>{customer.dog_name}</strong> ({customer.breed})
-                          <br />
-                          <small>{customer.customer_name} - {customer.phone}</small>
+                          <div style={{ fontWeight: '600', color: '#667eea', marginBottom: '4px' }}>
+                            🐕 {customer.dog_name}
+                          </div>
+                          <div style={{ fontSize: '0.85rem', color: '#666' }}>
+                            {customer.breed} | {customer.customer_name} | {customer.phone}
+                          </div>
                         </div>
                       ))}
                     </div>
                   )}
                 </div>
+                {reservationForm.dog_name && (
+                  <div style={{
+                    marginTop: '10px',
+                    padding: '10px',
+                    background: '#e7f3ff',
+                    borderRadius: '6px',
+                    fontSize: '0.9rem',
+                    color: '#1976d2'
+                  }}>
+                    ✓ 선택됨: <strong>{reservationForm.dog_name}</strong> ({reservationForm.customer_name})
+                  </div>
+                )}
               </div>
 
               {/* 체크인 날짜 */}
@@ -1267,7 +1323,12 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
                 <button
                   type="button"
                   className="btn"
-                  onClick={() => setShowReservationModal(false)}
+                  onClick={() => {
+                    setShowReservationModal(false)
+                    setShowAutoComplete(false)
+                    setAutoCompleteResults([])
+                    setDogName('')
+                  }}
                   style={{ flex: 1, background: '#6c757d', color: 'white' }}
                 >
                   취소

@@ -463,17 +463,12 @@ export function calculateDaycareFee(weight, duration_minutes) {
   let additionalFee = 0;
   let additionalUnit = '';
   
-  // 남은 시간 처리 (15분 미만은 무시)
+  // 남은 시간 처리 (15분 미만은 무시, 15분 이상은 30분 단위로 올림)
   if (remainingMinutes >= 15) {
-    if (remainingMinutes < 30) {
-      // 15분 이상 30분 미만: 30분 요금
-      additionalFee = pricePer30min;
-      additionalUnit = '30분';
-    } else {
-      // 30분 이상: 1시간 요금
-      additionalFee = pricePerHour;
-      additionalUnit = '1시간';
-    }
+    // 15분 이상이면 30분 단위로 올림 계산
+    const halfHours = Math.ceil(remainingMinutes / 30);
+    additionalFee = halfHours * pricePer30min;
+    additionalUnit = `${halfHours * 30}분`;
   }
   
   fee += additionalFee;
