@@ -10,6 +10,7 @@ function HotelingCalendar({ onRefresh }) {
   const [reservations, setReservations] = useState([])
   const [currentMonthReservations, setCurrentMonthReservations] = useState([])
   const [currentVisits, setCurrentVisits] = useState([])
+  const [dateVisitHistory, setDateVisitHistory] = useState([])
   const [showAddModal, setShowAddModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [selectedReservation, setSelectedReservation] = useState(null)
@@ -41,10 +42,19 @@ function HotelingCalendar({ onRefresh }) {
     fetchCurrentVisits()
   }, [selectedDate])
 
-  // 선택한 날짜의 예약 불러오기
+  // 선택한 날짜의 예약 및 방문 기록 불러오기
   useEffect(() => {
     fetchDateReservations(selectedDate)
+    fetchDateVisitHistory(selectedDate)
   }, [selectedDate, currentMonthReservations])
+
+  // 날짜를 YYYY-MM-DD 형식으로 변환 (로컬 시간대 기준)
+  const formatDateToString = (date) => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
 
   // 현재 체크인 목록 불러오기
   const fetchCurrentVisits = async () => {
@@ -60,8 +70,8 @@ function HotelingCalendar({ onRefresh }) {
     try {
       const year = date.getFullYear()
       const month = date.getMonth()
-      const firstDay = new Date(year, month, 1).toISOString().split('T')[0]
-      const lastDay = new Date(year, month + 1, 0).toISOString().split('T')[0]
+      const firstDay = formatDateToString(new Date(year, month, 1))
+      const lastDay = formatDateToString(new Date(year, month + 1, 0))
       
       const response = await axios.get(`${API_URL}/reservations`, {
         params: { start_date: firstDay, end_date: lastDay }
@@ -73,11 +83,27 @@ function HotelingCalendar({ onRefresh }) {
   }
 
   const fetchDateReservations = (date) => {
-    const dateStr = date.toISOString().split('T')[0]
+    const dateStr = formatDateToString(date)
     const filtered = currentMonthReservations.filter(res => {
       return dateStr >= res.start_date && dateStr <= res.end_date
     })
     setReservations(filtered)
+  }
+
+  // 선택한 날짜의 방문 기록 불러오기
+  const fetchDateVisitHistory = async (date) => {
+    try {
+      const dateStr = formatDateToString(date)
+      const response = await axios.get(`${API_URL}/visit-history`, {
+        params: { date: dateStr }
+      })
+      // 호텔링만 필터링
+      const hotelingVisits = response.data.filter(visit => visit.visit_type === 'hoteling')
+      setDateVisitHistory(hotelingVisits)
+    } catch (error) {
+      console.error('방문 기록 조회 실패:', error)
+      setDateVisitHistory([])
+    }
   }
 
   // 고객 검색
@@ -114,7 +140,7 @@ function HotelingCalendar({ onRefresh }) {
 
   // 예약 추가 모달 열기
   const handleAddReservation = () => {
-    const dateStr = selectedDate.toISOString().split('T')[0]
+    const dateStr = formatDateToString(selectedDate)
     setFormData({
       customer_id: '',
       customer_name: '',
@@ -377,7 +403,7 @@ function HotelingCalendar({ onRefresh }) {
   // 캘린더 타일에 예약 표시
   const tileContent = ({ date, view }) => {
     if (view === 'month') {
-      const dateStr = date.toISOString().split('T')[0]
+      const dateStr = formatDateToString(date)
       const count = currentMonthReservations.filter(res => {
         return dateStr >= res.start_date && dateStr <= res.end_date
       }).length
@@ -527,15 +553,16 @@ function HotelingCalendar({ onRefresh }) {
       {/* 선택한 날짜의 예약 목록 */}
       <div style={{ marginBottom: '30px' }}>
         <h3 style={{ color: '#667eea', marginBottom: '15px' }}>
-          📋 {formatDate(selectedDate.toISOString().split('T')[0])} 예약 목록
+          📋 {formatDate(formatDateToString(selectedDate))} 예약 및 이용 내역
         </h3>
 
-        {reservations.length === 0 ? (
-          <div className="empty-state">
-            <p>이 날짜에 예약이 없습니다.</p>
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gap: '10px' }}>
+        {/* 예약 목록 */}
+        {reservations.length > 0 && (
+          <div style={{ marginBottom: '20px' }}>
+            <h4 style={{ color: '#667eea', marginBottom: '10px', fontSize: '1rem' }}>
+              📅 예약 목록
+            </h4>
+            <div style={{ display: 'grid', gap: '10px' }}>
               {reservations.map(reservation => {
                 const checkedIn = isCheckedIn(reservation.customer_id)
                 return (
@@ -676,6 +703,54 @@ function HotelingCalendar({ onRefresh }) {
                   </div>
                 )
               })}
+            </div>
+          </div>
+        )}
+
+        {/* 방문 기록 (호텔링 이용 완료) */}
+        {dateVisitHistory.length > 0 && (
+          <div>
+            <h4 style={{ color: '#28a745', marginBottom: '10px', fontSize: '1rem' }}>
+              ✅ 이용 완료 내역
+            </h4>
+            <div style={{ display: 'grid', gap: '10px' }}>
+              {dateVisitHistory.map(visit => (
+                <div
+                  key={visit.id}
+                  style={{
+                    padding: '15px',
+                    background: '#f0fdf4',
+                    borderRadius: '8px',
+                    border: '2px solid #28a745'
+                  }}
+                >
+                  <div style={{ fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '5px' }}>
+                    🐕 {visit.dog_name}
+                  </div>
+                  <div style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.6' }}>
+                    <div>보호자: {visit.customer_name}</div>
+                    <div>견종: {visit.breed}</div>
+                    <div>체크인: {formatDateTime(visit.check_in)}</div>
+                    <div>체크아웃: {formatDateTime(visit.check_out)}</div>
+                    <div style={{ color: '#28a745', fontWeight: '600' }}>
+                      이용시간: {Math.floor(visit.duration_minutes / 60)}시간 {visit.duration_minutes % 60}분
+                    </div>
+                    {visit.prepaid && visit.prepaid_amount > 0 && (
+                      <div style={{ color: '#f57c00', fontWeight: '600', marginTop: '5px' }}>
+                        💰 선결제: {visit.prepaid_amount.toLocaleString()}원
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 데이터 없을 때 */}
+        {reservations.length === 0 && dateVisitHistory.length === 0 && (
+          <div className="empty-state">
+            <p>이 날짜에 예약 및 이용 내역이 없습니다.</p>
           </div>
         )}
       </div>
