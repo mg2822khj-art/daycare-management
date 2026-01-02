@@ -25,7 +25,15 @@ import {
   getDeletedCustomers,
   getDeletedVisits,
   restoreCustomer,
-  restoreVisit
+  restoreVisit,
+  createReservation,
+  getReservationsByDateRange,
+  getReservationsByDate,
+  getAllReservations,
+  getCustomerReservations,
+  updateReservation,
+  deleteReservation,
+  getReservationById
 } from './database.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -451,6 +459,141 @@ app.post('/api/trash/visits/:visitId/restore', (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: '방문 기록 복구 중 오류가 발생했습니다.' });
+  }
+});
+
+// ===== 호텔링 예약 API =====
+
+// 예약 생성
+app.post('/api/reservations', (req, res) => {
+  try {
+    const { customer_id, start_date, end_date, notes } = req.body;
+    
+    if (!customer_id || !start_date || !end_date) {
+      return res.status(400).json({ error: '고객, 시작일, 종료일을 입력해주세요.' });
+    }
+
+    // 날짜 유효성 검사
+    const start = new Date(start_date);
+    const end = new Date(end_date);
+    if (start > end) {
+      return res.status(400).json({ error: '시작일이 종료일보다 늦을 수 없습니다.' });
+    }
+
+    // 고객 존재 확인
+    const customer = findCustomerById(customer_id);
+    if (!customer) {
+      return res.status(404).json({ error: '등록되지 않은 고객입니다.' });
+    }
+
+    const result = createReservation(customer_id, start_date, end_date, notes || '');
+    res.json({ 
+      success: true, 
+      id: result.lastInsertRowid,
+      message: '예약이 등록되었습니다.'
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: '예약 등록 중 오류가 발생했습니다.' });
+  }
+});
+
+// 모든 예약 조회
+app.get('/api/reservations', (req, res) => {
+  try {
+    const { start_date, end_date, date } = req.query;
+    
+    let reservations;
+    if (date) {
+      // 특정 날짜
+      reservations = getReservationsByDate(date);
+    } else if (start_date && end_date) {
+      // 기간 조회
+      reservations = getReservationsByDateRange(start_date, end_date);
+    } else {
+      // 전체 조회
+      reservations = getAllReservations();
+    }
+    
+    res.json(reservations);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: '예약 목록 조회 중 오류가 발생했습니다.' });
+  }
+});
+
+// 특정 예약 조회
+app.get('/api/reservations/:reservationId', (req, res) => {
+  try {
+    const { reservationId } = req.params;
+    const reservation = getReservationById(reservationId);
+    
+    if (!reservation) {
+      return res.status(404).json({ error: '예약을 찾을 수 없습니다.' });
+    }
+    
+    res.json(reservation);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: '예약 조회 중 오류가 발생했습니다.' });
+  }
+});
+
+// 특정 고객의 예약 조회
+app.get('/api/customers/:customerId/reservations', (req, res) => {
+  try {
+    const { customerId } = req.params;
+    const reservations = getCustomerReservations(customerId);
+    res.json(reservations);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: '고객 예약 조회 중 오류가 발생했습니다.' });
+  }
+});
+
+// 예약 수정
+app.put('/api/reservations/:reservationId', (req, res) => {
+  try {
+    const { reservationId } = req.params;
+    const { start_date, end_date, notes, status } = req.body;
+    
+    if (!start_date || !end_date) {
+      return res.status(400).json({ error: '시작일과 종료일을 입력해주세요.' });
+    }
+
+    // 날짜 유효성 검사
+    const start = new Date(start_date);
+    const end = new Date(end_date);
+    if (start > end) {
+      return res.status(400).json({ error: '시작일이 종료일보다 늦을 수 없습니다.' });
+    }
+
+    // 예약 존재 확인
+    const reservation = getReservationById(reservationId);
+    if (!reservation) {
+      return res.status(404).json({ error: '예약을 찾을 수 없습니다.' });
+    }
+
+    updateReservation(reservationId, start_date, end_date, notes || '', status || 'confirmed');
+    res.json({ 
+      success: true, 
+      message: '예약이 수정되었습니다.'
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: '예약 수정 중 오류가 발생했습니다.' });
+  }
+});
+
+// 예약 삭제
+app.delete('/api/reservations/:reservationId', (req, res) => {
+  try {
+    const { reservationId } = req.params;
+    deleteReservation(reservationId);
+    res.json({ success: true, message: '예약이 삭제되었습니다.' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: '예약 삭제 중 오류가 발생했습니다.' });
   }
 });
 

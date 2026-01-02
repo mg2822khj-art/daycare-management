@@ -99,7 +99,7 @@ try {
   console.log('테이블 체크 중 에러 (무시됨):', e.message);
 }
 
-// 테이블 생성 (soft delete 지원, 데이케어/호텔링 구분)
+// 테이블 생성 (soft delete 지원, 데이케어/호텔링 구분, 호텔링 예약)
 db.run(`
   CREATE TABLE IF NOT EXISTS customers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -124,11 +124,25 @@ db.run(`
     FOREIGN KEY (customer_id) REFERENCES customers (id)
   );
 
+  CREATE TABLE IF NOT EXISTS hoteling_reservations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    customer_id INTEGER NOT NULL,
+    start_date TEXT NOT NULL,
+    end_date TEXT NOT NULL,
+    notes TEXT,
+    status TEXT DEFAULT 'confirmed',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    deleted_at DATETIME DEFAULT NULL,
+    FOREIGN KEY (customer_id) REFERENCES customers (id)
+  );
+
   CREATE INDEX IF NOT EXISTS idx_dog_name ON customers(dog_name);
   CREATE INDEX IF NOT EXISTS idx_visits_customer ON visits(customer_id);
   CREATE INDEX IF NOT EXISTS idx_visits_type ON visits(visit_type);
   CREATE INDEX IF NOT EXISTS idx_customers_deleted ON customers(deleted_at);
   CREATE INDEX IF NOT EXISTS idx_visits_deleted ON visits(deleted_at);
+  CREATE INDEX IF NOT EXISTS idx_reservations_dates ON hoteling_reservations(start_date, end_date);
+  CREATE INDEX IF NOT EXISTS idx_reservations_deleted ON hoteling_reservations(deleted_at);
 `);
 saveDatabase();
 console.log('✅ 데이터베이스 초기화 완료');
@@ -673,6 +687,156 @@ export function restoreVisit(visit_id) {
   stmt.step();
   stmt.free();
   saveDatabase();
+}
+
+// ===== 호텔링 예약 관련 함수 =====
+
+// 예약 생성 (한국 시간)
+export function createReservation(customer_id, start_date, end_date, notes = '') {
+  const stmt = db.prepare("INSERT INTO hoteling_reservations (customer_id, start_date, end_date, notes) VALUES (?, ?, ?, ?)");
+  stmt.bind([customer_id, start_date, end_date, notes]);
+  stmt.step();
+  stmt.free();
+  saveDatabase();
+  const result = db.exec('SELECT last_insert_rowid() as id');
+  return { lastInsertRowid: result[0].values[0][0] };
+}
+
+// 특정 기간의 예약 조회
+export function getReservationsByDateRange(start_date, end_date) {
+  try {
+    const stmt = db.prepare(`
+      SELECT r.*, c.customer_name, c.dog_name, c.phone, c.breed
+      FROM hoteling_reservations r
+      JOIN customers c ON r.customer_id = c.id
+      WHERE r.deleted_at IS NULL 
+        AND c.deleted_at IS NULL
+        AND (
+          (r.start_date <= ? AND r.end_date >= ?)
+          OR (r.start_date >= ? AND r.start_date <= ?)
+          OR (r.end_date >= ? AND r.end_date <= ?)
+        )
+      ORDER BY r.start_date ASC
+    `);
+    stmt.bind([end_date, start_date, start_date, end_date, start_date, end_date]);
+    const results = [];
+    while (stmt.step()) {
+      results.push(stmt.getAsObject());
+    }
+    stmt.free();
+    return results;
+  } catch (error) {
+    console.error('예약 조회 오류:', error);
+    return [];
+  }
+}
+
+// 특정 날짜의 예약 조회
+export function getReservationsByDate(date) {
+  try {
+    const stmt = db.prepare(`
+      SELECT r.*, c.customer_name, c.dog_name, c.phone, c.breed
+      FROM hoteling_reservations r
+      JOIN customers c ON r.customer_id = c.id
+      WHERE r.deleted_at IS NULL 
+        AND c.deleted_at IS NULL
+        AND r.start_date <= ? 
+        AND r.end_date >= ?
+      ORDER BY r.start_date ASC
+    `);
+    stmt.bind([date, date]);
+    const results = [];
+    while (stmt.step()) {
+      results.push(stmt.getAsObject());
+    }
+    stmt.free();
+    return results;
+  } catch (error) {
+    console.error('예약 조회 오류:', error);
+    return [];
+  }
+}
+
+// 모든 예약 조회 (최근 순)
+export function getAllReservations() {
+  try {
+    const result = db.exec(`
+      SELECT r.*, c.customer_name, c.dog_name, c.phone, c.breed
+      FROM hoteling_reservations r
+      JOIN customers c ON r.customer_id = c.id
+      WHERE r.deleted_at IS NULL AND c.deleted_at IS NULL
+      ORDER BY r.start_date DESC
+      LIMIT 500
+    `);
+    if (!result.length) return [];
+    const columns = result[0].columns;
+    return result[0].values.map(row => {
+      const obj = {};
+      columns.forEach((col, idx) => { obj[col] = row[idx]; });
+      return obj;
+    });
+  } catch (error) {
+    console.error('예약 목록 조회 오류:', error);
+    return [];
+  }
+}
+
+// 특정 고객의 예약 조회
+export function getCustomerReservations(customer_id) {
+  try {
+    const stmt = db.prepare(`
+      SELECT * FROM hoteling_reservations
+      WHERE customer_id = ? AND deleted_at IS NULL
+      ORDER BY start_date DESC
+    `);
+    stmt.bind([customer_id]);
+    const results = [];
+    while (stmt.step()) {
+      results.push(stmt.getAsObject());
+    }
+    stmt.free();
+    return results;
+  } catch (error) {
+    console.error('고객 예약 조회 오류:', error);
+    return [];
+  }
+}
+
+// 예약 수정
+export function updateReservation(reservation_id, start_date, end_date, notes, status) {
+  const stmt = db.prepare('UPDATE hoteling_reservations SET start_date = ?, end_date = ?, notes = ?, status = ? WHERE id = ?');
+  stmt.bind([start_date, end_date, notes, status, reservation_id]);
+  stmt.step();
+  stmt.free();
+  saveDatabase();
+}
+
+// 예약 삭제 (soft delete, 한국 시간)
+export function deleteReservation(reservation_id) {
+  const stmt = db.prepare("UPDATE hoteling_reservations SET deleted_at = datetime('now', '+9 hours') WHERE id = ?");
+  stmt.bind([reservation_id]);
+  stmt.step();
+  stmt.free();
+  saveDatabase();
+}
+
+// 예약 ID로 조회
+export function getReservationById(reservation_id) {
+  try {
+    const stmt = db.prepare(`
+      SELECT r.*, c.customer_name, c.dog_name, c.phone, c.breed
+      FROM hoteling_reservations r
+      JOIN customers c ON r.customer_id = c.id
+      WHERE r.id = ? AND r.deleted_at IS NULL AND c.deleted_at IS NULL
+    `);
+    stmt.bind([reservation_id]);
+    const result = stmt.step() ? stmt.getAsObject() : null;
+    stmt.free();
+    return result;
+  } catch (error) {
+    console.error('예약 조회 오류:', error);
+    return null;
+  }
 }
 
 export default db;

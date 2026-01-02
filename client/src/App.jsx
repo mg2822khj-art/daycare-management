@@ -5,6 +5,7 @@ import CheckInOut from './components/CheckInOut'
 import CustomerList from './components/CustomerList'
 import VisitHistory from './components/VisitHistory'
 import TrashBin from './components/TrashBin'
+import HotelingCalendar from './components/HotelingCalendar'
 
 const API_URL = '/api' // 상대 경로 사용 (모바일 지원)
 
@@ -77,6 +78,12 @@ function App() {
           고객 목록
         </button>
         <button
+          className={`tab-button ${activeTab === 'calendar' ? 'active' : ''}`}
+          onClick={() => setActiveTab('calendar')}
+        >
+          🗓️ 예약 캘린더
+        </button>
+        <button
           className={`tab-button ${activeTab === 'history' ? 'active' : ''}`}
           onClick={() => setActiveTab('history')}
         >
@@ -113,6 +120,10 @@ function App() {
 
         {activeTab === 'customers' && (
           <CustomerList customers={customers} onUpdate={fetchCustomers} />
+        )}
+
+        {activeTab === 'calendar' && (
+          <HotelingCalendar />
         )}
 
         {activeTab === 'history' && (

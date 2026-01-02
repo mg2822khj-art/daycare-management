@@ -387,3 +387,167 @@ body {
   font-size: 1.1rem;
 }
 
+/* 캘린더 스타일 */
+.react-calendar {
+  width: 100% !important;
+  border: none !important;
+  border-radius: 12px !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
+  padding: 15px !important;
+  font-family: inherit !important;
+}
+
+.react-calendar__tile {
+  padding: 15px 5px !important;
+  border-radius: 8px !important;
+  transition: all 0.2s !important;
+}
+
+.react-calendar__tile:hover {
+  background: #e7f3ff !important;
+}
+
+.react-calendar__tile--active {
+  background: #667eea !important;
+  color: white !important;
+}
+
+.react-calendar__tile--now {
+  background: #fff4e6 !important;
+}
+
+.react-calendar__navigation button {
+  font-size: 1.1rem !important;
+  font-weight: 600 !important;
+  color: #667eea !important;
+  min-width: 44px !important;
+  border-radius: 8px !important;
+}
+
+.react-calendar__navigation button:hover {
+  background: #e7f3ff !important;
+}
+
+.react-calendar__month-view__weekdays {
+  font-weight: 600 !important;
+  color: #666 !important;
+  font-size: 0.9rem !important;
+}
+
+.react-calendar__month-view__days__day--weekend {
+  color: #f45c43 !important;
+}
+
+/* 모달 스타일 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 15px;
+  padding: 30px;
+  max-width: 500px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+
+.modal-content h3 {
+  color: #667eea;
+  margin-bottom: 20px;
+}
+
+/* 검색 결과 스타일 */
+.search-results {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  border: 2px solid #667eea;
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.search-result-item {
+  padding: 12px 15px;
+  cursor: pointer;
+  transition: background 0.2s;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.search-result-item:last-child {
+  border-bottom: none;
+}
+
+.search-result-item:hover {
+  background: #f0f0f0;
+}
+
+.search-result-item strong {
+  color: #667eea;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.search-result-item small {
+  color: #666;
+  font-size: 0.85rem;
+}
+
+/* 폼 입력 필드 추가 스타일 */
+.form-group {
+  position: relative;
+}
+
+.form-group textarea {
+  width: 100%;
+  padding: 12px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-family: inherit;
+  transition: border-color 0.3s;
+  resize: vertical;
+}
+
+.form-group textarea:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.form-input {
+  width: 100%;
+  padding: 12px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 1rem;
+  transition: border-color 0.3s;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.form-input:disabled {
+  background: #f0f0f0;
+  cursor: not-allowed;
+}
+
