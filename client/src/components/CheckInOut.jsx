@@ -81,7 +81,9 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
       }
 
       try {
+        console.log('자동완성 검색 시작:', dogName.trim())
         const response = await axios.get(`${API_URL}/customers/autocomplete?q=${encodeURIComponent(dogName.trim())}`)
+        console.log('자동완성 검색 결과:', response.data)
         setAutoCompleteResults(response.data)
         setShowAutoComplete(response.data.length > 0)
       } catch (error) {
@@ -91,14 +93,19 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
       }
     }
 
-    // 딜레이를 줄여서 더 빠르게 반응 (150ms)
-    const timeoutId = setTimeout(searchAutoComplete, 150)
+    // 딜레이를 더 줄여서 빠르게 반응 (100ms)
+    const timeoutId = setTimeout(searchAutoComplete, 100)
     return () => clearTimeout(timeoutId)
   }, [dogName])
 
-  // 외부 클릭 감지
+  // 외부 클릭 감지 (모달 제외)
   useEffect(() => {
     const handleClickOutside = (event) => {
+      // 모달이 열려있으면 외부 클릭 감지 안 함
+      if (showReservationModal || showCheckInModal) {
+        return
+      }
+      
       if (autoCompleteRef.current && !autoCompleteRef.current.contains(event.target)) {
         setShowAutoComplete(false)
       }
@@ -106,7 +113,7 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
 
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+  }, [showReservationModal, showCheckInModal])
 
   const handleSearch = async (e) => {
     e.preventDefault()
@@ -1195,12 +1202,18 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
 
       {/* 예약 추가 모달 */}
       {showReservationModal && (
-        <div className="modal-overlay" onClick={() => {
-          setShowReservationModal(false)
-          setShowAutoComplete(false)
-          setAutoCompleteResults([])
-          setDogName('')
-        }}>
+        <div 
+          className="modal-overlay" 
+          onClick={(e) => {
+            // 오버레이 직접 클릭 시에만 닫기
+            if (e.target.classList.contains('modal-overlay')) {
+              setShowReservationModal(false)
+              setShowAutoComplete(false)
+              setAutoCompleteResults([])
+              setDogName('')
+            }
+          }}
+        >
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h3 style={{ marginBottom: '20px' }}>호텔링 예약 추가</h3>
             
