@@ -11,6 +11,7 @@ import {
   getAllCustomers,
   checkIn,
   checkOut,
+  checkOutWithTime,
   updateCheckInTime,
   getVisitById,
   calculateDuration,
@@ -220,7 +221,7 @@ app.put('/api/visits/:visitId/checkin-time', (req, res) => {
 // 체크아웃 요금 계산 (체크아웃 전)
 app.post('/api/checkout/calculate', (req, res) => {
   try {
-    const { visit_id } = req.body;
+    const { visit_id, checkout_time } = req.body;
     
     if (!visit_id) {
       return res.status(400).json({ error: '방문 ID가 필요합니다.' });
@@ -237,8 +238,18 @@ app.post('/api/checkout/calculate', (req, res) => {
     }
 
     // 체크아웃 시간 계산 (한국 시간 기준)
-    // 데이터베이스 함수를 사용하여 한국 시간으로 계산
-    const duration_minutes = calculateDuration(visit.check_in);
+    let duration_minutes;
+    if (checkout_time) {
+      // 사용자 지정 체크아웃 시간으로 계산
+      const checkInTime = new Date(visit.check_in);
+      const checkOutTime = new Date(checkout_time);
+      duration_minutes = Math.floor((checkOutTime - checkInTime) / 1000 / 60);
+      // 음수 방지
+      if (duration_minutes < 0) duration_minutes = 0;
+    } else {
+      // 데이터베이스 함수를 사용하여 한국 시간으로 계산
+      duration_minutes = calculateDuration(visit.check_in);
+    }
 
     // 데이케어 요금 계산
     if (visit.visit_type === 'daycare') {
@@ -249,6 +260,7 @@ app.post('/api/checkout/calculate', (req, res) => {
         fee_info: feeInfo,
         duration_minutes,
         check_in: visit.check_in,
+        checkout_time: checkout_time || null,
         dog_name: visit.dog_name,
         customer_name: visit.customer_name,
         prepaid: visit.prepaid || 0,
@@ -263,6 +275,7 @@ app.post('/api/checkout/calculate', (req, res) => {
         fee_info: feeInfo,
         duration_minutes,
         check_in: visit.check_in,
+        checkout_time: checkout_time || null,
         dog_name: visit.dog_name,
         customer_name: visit.customer_name,
         prepaid: visit.prepaid || 0,
@@ -278,14 +291,19 @@ app.post('/api/checkout/calculate', (req, res) => {
 // 체크아웃
 app.post('/api/checkout', (req, res) => {
   try {
-    const { visit_id } = req.body;
+    const { visit_id, checkout_time } = req.body;
     
     if (!visit_id) {
       return res.status(400).json({ error: '방문 ID가 필요합니다.' });
     }
 
-    // 체크아웃
-    checkOut(visit_id);
+    // 사용자 지정 체크아웃 시간이 있으면 그것을 사용, 없으면 현재 시간 사용
+    if (checkout_time) {
+      checkOutWithTime(visit_id, checkout_time);
+    } else {
+      checkOut(visit_id);
+    }
+    
     res.json({ 
       success: true,
       message: '체크아웃 완료!'

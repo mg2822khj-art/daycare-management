@@ -435,7 +435,7 @@ export function calculateDuration(check_in_time) {
   }
 }
 
-// 데이케어 요금 계산 (1시간 단위, 남은 시간은 30분 기준)
+// 데이케어 요금 계산 (1시간 단위, 남은 시간은 30분 기준, 15분 미만은 무시)
 export function calculateDaycareFee(weight, duration_minutes) {
   if (!weight || weight < 2) {
     return { fee: 0, message: '몸무게 정보가 없거나 2kg 미만입니다.' };
@@ -463,10 +463,10 @@ export function calculateDaycareFee(weight, duration_minutes) {
   let additionalFee = 0;
   let additionalUnit = '';
   
-  // 남은 시간 처리
-  if (remainingMinutes > 0) {
+  // 남은 시간 처리 (15분 미만은 무시)
+  if (remainingMinutes >= 15) {
     if (remainingMinutes < 30) {
-      // 30분 미만: 30분 요금만
+      // 15분 이상 30분 미만: 30분 요금
       additionalFee = pricePer30min;
       additionalUnit = '30분';
     } else {
@@ -491,7 +491,7 @@ export function calculateDaycareFee(weight, duration_minutes) {
   };
 }
 
-// 호텔링 요금 계산 (1일 기준, 초과 시간은 30분당 데이케어 요금)
+// 호텔링 요금 계산 (1일 기준, 초과 시간은 30분당 데이케어 요금, 15분 미만은 무시)
 export function calculateHotelingFee(weight, duration_minutes, prepaid_amount = 0) {
   if (!weight || weight < 2) {
     return { 
@@ -524,10 +524,10 @@ export function calculateHotelingFee(weight, duration_minutes, prepaid_amount = 
   // 기본 일수 요금
   let totalFee = fullDays * pricePerDay;
   
-  // 초과 시간 계산 (30분 단위)
+  // 초과 시간 계산 (15분 미만은 무시, 15분 이상은 30분 단위로 올림)
   let overtimeFee = 0;
-  if (remainingMinutes > 0) {
-    // 30분 단위로 올림
+  if (remainingMinutes >= 15) {
+    // 15분 이상이면 30분 단위로 올림
     const halfHours = Math.ceil(remainingMinutes / 30);
     overtimeFee = halfHours * pricePer30min;
     
@@ -565,6 +565,20 @@ export function checkOut(visit_id) {
     WHERE id = ? AND check_out IS NULL
   `);
   stmt.bind([visit_id]);
+  stmt.step();
+  stmt.free();
+  saveDatabase();
+}
+
+// 사용자 지정 시간으로 체크아웃
+export function checkOutWithTime(visit_id, checkout_time) {
+  const stmt = db.prepare(`
+    UPDATE visits 
+    SET check_out = ?,
+        duration_minutes = CAST((julianday(?) - julianday(check_in)) * 24 * 60 AS INTEGER)
+    WHERE id = ? AND check_out IS NULL
+  `);
+  stmt.bind([checkout_time, checkout_time, visit_id]);
   stmt.step();
   stmt.free();
   saveDatabase();

@@ -18,6 +18,7 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
   const [editCheckInTime, setEditCheckInTime] = useState('')
   const [checkoutConfirm, setCheckoutConfirm] = useState(null)
   const [feeInfo, setFeeInfo] = useState(null)
+  const [editCheckOutTime, setEditCheckOutTime] = useState('')
   const [prepaid, setPrepaid] = useState(false)
   const [prepaidAmount, setPrepaidAmount] = useState('')
   const [todayReservations, setTodayReservations] = useState([])
@@ -302,6 +303,16 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
       if (response.data.success && response.data.fee_info) {
         setCheckoutConfirm(visit)
         setFeeInfo(response.data.fee_info)
+        
+        // 현재 시간을 체크아웃 시간 기본값으로 설정
+        const now = new Date()
+        const year = now.getFullYear()
+        const month = String(now.getMonth() + 1).padStart(2, '0')
+        const day = String(now.getDate()).padStart(2, '0')
+        const hours = String(now.getHours()).padStart(2, '0')
+        const minutes = String(now.getMinutes()).padStart(2, '0')
+        setEditCheckOutTime(`${year}-${month}-${day}T${hours}:${minutes}`)
+        
         setIsLoading(false)
         return
       }
@@ -319,13 +330,22 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
 
   const confirmCheckout = async (visit_id) => {
     try {
-      const response = await axios.post(`${API_URL}/checkout`, {
-        visit_id: visit_id
-      })
+      // 수정된 체크아웃 시간을 서버에 전달
+      const checkoutData = { visit_id }
+      
+      if (editCheckOutTime) {
+        // datetime-local 형식을 YYYY-MM-DD HH:MM:SS 형식으로 변환
+        const [datePart, timePart] = editCheckOutTime.split('T')
+        const checkoutTimeStr = `${datePart} ${timePart}:00`
+        checkoutData.checkout_time = checkoutTimeStr
+      }
+      
+      const response = await axios.post(`${API_URL}/checkout`, checkoutData)
 
       setMessage({ type: 'success', text: response.data.message })
       setCheckoutConfirm(null)
       setFeeInfo(null)
+      setEditCheckOutTime('')
       onRefresh()
       if (visitType === 'hoteling') {
         fetchTodayReservations() // 예약 목록 갱신
@@ -343,7 +363,33 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
   const cancelCheckout = () => {
     setCheckoutConfirm(null)
     setFeeInfo(null)
+    setEditCheckOutTime('')
     setIsLoading(false)
+  }
+
+  // 체크아웃 시간 수정 시 요금 재계산
+  const handleCheckOutTimeChange = async (newTime) => {
+    setEditCheckOutTime(newTime)
+    
+    if (!checkoutConfirm || !newTime) return
+    
+    try {
+      // datetime-local 형식을 YYYY-MM-DD HH:MM:SS 형식으로 변환
+      const [datePart, timePart] = newTime.split('T')
+      const checkoutTimeStr = `${datePart} ${timePart}:00`
+      
+      // 요금 재계산
+      const response = await axios.post(`${API_URL}/checkout/calculate`, {
+        visit_id: checkoutConfirm.id,
+        checkout_time: checkoutTimeStr
+      })
+      
+      if (response.data.success && response.data.fee_info) {
+        setFeeInfo(response.data.fee_info)
+      }
+    } catch (error) {
+      console.error('요금 재계산 실패:', error)
+    }
   }
 
   const handleEditCheckInTime = (visit) => {
@@ -960,8 +1006,30 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
                 <div style={{ fontSize: '0.9rem', color: '#666' }}>
                   몸무게: {feeInfo.weight ? `${feeInfo.weight}kg` : '정보 없음'}
                 </div>
-                <div style={{ fontSize: '0.9rem', color: '#666' }}>
+                <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '10px' }}>
                   이용 시간: {Math.floor(feeInfo.duration_minutes / 60)}시간 {feeInfo.duration_minutes % 60}분
+                </div>
+                
+                {/* 체크아웃 시간 수정 */}
+                <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #e0e0e0' }}>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#333', fontSize: '0.95rem' }}>
+                    ⏰ 체크아웃 시간 수정
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={editCheckOutTime}
+                    onChange={(e) => handleCheckOutTimeChange(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: '2px solid #667eea',
+                      borderRadius: '6px',
+                      fontSize: '1rem'
+                    }}
+                  />
+                  <div style={{ fontSize: '0.8rem', color: '#999', marginTop: '5px' }}>
+                    💡 시간을 수정하면 요금이 자동으로 재계산됩니다
+                  </div>
                 </div>
               </div>
 
