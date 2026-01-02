@@ -294,21 +294,19 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
     setMessage({ type: '', text: '' })
 
     try {
-      // 데이케어인 경우 요금 계산
-      if (visit.visit_type === 'daycare') {
-        const response = await axios.post(`${API_URL}/checkout/calculate`, {
-          visit_id: visit.id
-        })
-        
-        if (response.data.success && response.data.fee_info) {
-          setCheckoutConfirm(visit)
-          setFeeInfo(response.data.fee_info)
-          setIsLoading(false)
-          return
-        }
+      // 요금 계산 (데이케어, 호텔링 모두)
+      const response = await axios.post(`${API_URL}/checkout/calculate`, {
+        visit_id: visit.id
+      })
+      
+      if (response.data.success && response.data.fee_info) {
+        setCheckoutConfirm(visit)
+        setFeeInfo(response.data.fee_info)
+        setIsLoading(false)
+        return
       }
 
-      // 호텔링이거나 요금 계산이 필요 없는 경우 바로 체크아웃
+      // 요금 정보가 없는 경우 바로 체크아웃
       await confirmCheckout(visit.id)
     } catch (error) {
       setMessage({
@@ -329,6 +327,9 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
       setCheckoutConfirm(null)
       setFeeInfo(null)
       onRefresh()
+      if (visitType === 'hoteling') {
+        fetchTodayReservations() // 예약 목록 갱신
+      }
     } catch (error) {
       setMessage({
         type: 'error',

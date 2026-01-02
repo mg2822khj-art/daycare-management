@@ -20,6 +20,10 @@ function HotelingCalendar({ onRefresh }) {
   const [checkInReservation, setCheckInReservation] = useState(null)
   const [prepaid, setPrepaid] = useState(false)
   const [prepaidAmount, setPrepaidAmount] = useState('')
+  const [checkoutConfirm, setCheckoutConfirm] = useState(null)
+  const [feeInfo, setFeeInfo] = useState(null)
+  const [editingVisit, setEditingVisit] = useState(null)
+  const [editCheckInTime, setEditCheckInTime] = useState('')
   
   // 예약 폼 데이터
   const [formData, setFormData] = useState({
@@ -251,7 +255,7 @@ function HotelingCalendar({ onRefresh }) {
     }
   }
 
-  // 체크아웃 처리
+  // 체크아웃 처리 (요금 계산 포함)
   const handleCheckOut = async (reservation) => {
     const visitId = getVisitId(reservation.customer_id)
     if (!visitId) {
@@ -259,21 +263,114 @@ function HotelingCalendar({ onRefresh }) {
       return
     }
 
-    if (!window.confirm(`"${reservation.dog_name}" 체크아웃 하시겠습니까?`)) {
-      return
-    }
-
     try {
-      await axios.post(`${API_URL}/checkout`, {
+      // 요금 계산
+      const response = await axios.post(`${API_URL}/checkout/calculate`, {
         visit_id: visitId
       })
       
-      alert(`${reservation.dog_name} 체크아웃 완료!`)
-      fetchCurrentVisits()
-      if (onRefresh) onRefresh() // 호텔링 탭 새로고침
+      if (response.data.success && response.data.fee_info) {
+        const visit = currentVisits.find(v => v.id === visitId)
+        setCheckoutConfirm({ ...visit, ...reservation })
+        setFeeInfo(response.data.fee_info)
+        return
+      }
+
+      // 요금 정보 없으면 바로 체크아웃
+      await confirmCheckout(visitId)
     } catch (error) {
       alert(error.response?.data?.error || '체크아웃 중 오류가 발생했습니다.')
     }
+  }
+
+  // 체크아웃 확정
+  const confirmCheckout = async (visit_id) => {
+    try {
+      await axios.post(`${API_URL}/checkout`, {
+        visit_id: visit_id
+      })
+      
+      alert('체크아웃 완료!')
+      setCheckoutConfirm(null)
+      setFeeInfo(null)
+      fetchCurrentVisits()
+      fetchMonthReservations(selectedDate)
+      if (onRefresh) onRefresh()
+    } catch (error) {
+      alert(error.response?.data?.error || '체크아웃 중 오류가 발생했습니다.')
+    }
+  }
+
+  // 체크아웃 취소
+  const cancelCheckout = () => {
+    setCheckoutConfirm(null)
+    setFeeInfo(null)
+  }
+
+  // 체크인 시간 수정
+  const handleEditCheckInTime = (visit) => {
+    setEditingVisit(visit)
+    const checkInDate = new Date(visit.check_in)
+    const year = checkInDate.getFullYear()
+    const month = String(checkInDate.getMonth() + 1).padStart(2, '0')
+    const day = String(checkInDate.getDate()).padStart(2, '0')
+    const hours = String(checkInDate.getHours()).padStart(2, '0')
+    const minutes = String(checkInDate.getMinutes()).padStart(2, '0')
+    setEditCheckInTime(`${year}-${month}-${day}T${hours}:${minutes}`)
+  }
+
+  // 체크인 시간 수정 확정
+  const handleSaveCheckInTime = async () => {
+    if (!editingVisit || !editCheckInTime) return
+
+    try {
+      const dateTime = new Date(editCheckInTime)
+      const formattedDateTime = dateTime.getFullYear() + '-' +
+        String(dateTime.getMonth() + 1).padStart(2, '0') + '-' +
+        String(dateTime.getDate()).padStart(2, '0') + ' ' +
+        String(dateTime.getHours()).padStart(2, '0') + ':' +
+        String(dateTime.getMinutes()).padStart(2, '0') + ':' +
+        String(dateTime.getSeconds()).padStart(2, '0')
+
+      await axios.put(`${API_URL}/visits/${editingVisit.id}/checkin-time`, {
+        check_in_time: formattedDateTime
+      })
+
+      alert('체크인 시간이 수정되었습니다.')
+      setEditingVisit(null)
+      setEditCheckInTime('')
+      fetchCurrentVisits()
+      if (onRefresh) onRefresh()
+    } catch (error) {
+      alert(error.response?.data?.error || '시간 수정 중 오류가 발생했습니다.')
+    }
+  }
+
+  // 시간 수정 취소
+  const handleCancelEdit = () => {
+    setEditingVisit(null)
+    setEditCheckInTime('')
+  }
+
+  // 날짜/시간 포맷팅
+  const formatDateTime = (datetime) => {
+    const date = new Date(datetime)
+    return date.toLocaleString('ko-KR', {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
+
+  // 경과 시간 계산
+  const getElapsedTime = (checkIn) => {
+    const start = new Date(checkIn)
+    const now = new Date()
+    const diff = now - start
+    const hours = Math.floor(diff / (1000 * 60 * 60))
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+    return `${hours}시간 ${minutes}분`
   }
 
   // 캘린더 타일에 예약 표시
@@ -329,6 +426,75 @@ function HotelingCalendar({ onRefresh }) {
       <h2 style={{ marginBottom: '20px', color: '#333' }}>
         🗓️ 호텔링 예약 캘린더
       </h2>
+
+      {/* 현재 체크인 중인 목록 */}
+      {currentVisits.length > 0 && (
+        <div style={{ marginBottom: '30px', padding: '20px', background: '#f0f8ff', borderRadius: '12px', border: '2px solid #667eea' }}>
+          <h3 style={{ color: '#667eea', marginBottom: '15px' }}>
+            🏠 현재 호텔링 중 ({currentVisits.length}마리)
+          </h3>
+          <div style={{ display: 'grid', gap: '10px' }}>
+            {currentVisits.map((visit) => (
+              <div
+                key={visit.id}
+                style={{
+                  padding: '15px',
+                  background: 'white',
+                  borderRadius: '8px',
+                  border: '1px solid #e0e0e0'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '5px' }}>
+                      🐕 {visit.dog_name}
+                    </div>
+                    <div style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.6' }}>
+                      <div>보호자: {visit.customer_name}</div>
+                      <div>체크인: {formatDateTime(visit.check_in)}</div>
+                      <div>경과시간: {getElapsedTime(visit.check_in)}</div>
+                      {visit.prepaid && visit.prepaid_amount > 0 && (
+                        <div style={{ color: '#f57c00', fontWeight: '600', marginTop: '5px' }}>
+                          💰 선결제: {visit.prepaid_amount.toLocaleString()}원
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                  <button
+                    className="btn"
+                    onClick={() => handleEditCheckInTime(visit)}
+                    style={{
+                      flex: 1,
+                      padding: '8px',
+                      background: '#6c757d',
+                      color: 'white',
+                      fontSize: '0.9rem'
+                    }}
+                  >
+                    ⏰ 시간 수정
+                  </button>
+                  <button
+                    className="btn btn-danger"
+                    onClick={() => {
+                      const reservation = { dog_name: visit.dog_name, customer_id: visit.customer_id }
+                      handleCheckOut(reservation)
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: '8px',
+                      fontSize: '0.9rem'
+                    }}
+                  >
+                    🚪 체크아웃
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: '30px', flexWrap: 'wrap' }}>
         {/* 캘린더 영역 */}
@@ -442,20 +608,39 @@ function HotelingCalendar({ onRefresh }) {
                       gap: '8px'
                     }}>
                       {checkedIn ? (
-                        <button
-                          className="btn btn-danger"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleCheckOut(reservation)
-                          }}
-                          style={{
-                            flex: 1,
-                            padding: '10px',
-                            fontSize: '0.95rem'
-                          }}
-                        >
-                          🚪 체크아웃
-                        </button>
+                        <>
+                          <button
+                            className="btn"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              const visit = currentVisits.find(v => v.customer_id === reservation.customer_id)
+                              if (visit) handleEditCheckInTime(visit)
+                            }}
+                            style={{
+                              flex: 1,
+                              padding: '10px',
+                              fontSize: '0.95rem',
+                              background: '#6c757d',
+                              color: 'white'
+                            }}
+                          >
+                            ⏰ 시간 수정
+                          </button>
+                          <button
+                            className="btn btn-danger"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleCheckOut(reservation)
+                            }}
+                            style={{
+                              flex: 1,
+                              padding: '10px',
+                              fontSize: '0.95rem'
+                            }}
+                          >
+                            🚪 체크아웃
+                          </button>
+                        </>
                       ) : (
                         <button
                           className="btn btn-success"
@@ -766,6 +951,190 @@ function HotelingCalendar({ onRefresh }) {
                 style={{ flex: 1, background: '#6c757d', color: 'white' }}
               >
                 취소
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 체크인 시간 수정 모달 */}
+      {editingVisit && (
+        <div className="modal-overlay" onClick={handleCancelEdit}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ marginBottom: '20px' }}>체크인 시간 수정</h3>
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ marginBottom: '10px', color: '#666' }}>
+                <strong>{editingVisit.dog_name}</strong> ({editingVisit.customer_name}님)
+              </div>
+              <div style={{ marginBottom: '15px', fontSize: '0.9rem', color: '#999' }}>
+                현재 체크인 시간: {formatDateTime(editingVisit.check_in)}
+              </div>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#333' }}>
+                새로운 체크인 시간
+              </label>
+              <input
+                type="datetime-local"
+                value={editCheckInTime}
+                onChange={(e) => setEditCheckInTime(e.target.value)}
+                className="form-input"
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  border: '2px solid #667eea',
+                  borderRadius: '6px',
+                  fontSize: '1rem'
+                }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={handleSaveCheckInTime}
+                className="btn btn-primary"
+                style={{ flex: 1 }}
+              >
+                저장
+              </button>
+              <button
+                onClick={handleCancelEdit}
+                className="btn"
+                style={{ flex: 1, background: '#6c757d', color: 'white' }}
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 체크아웃 확인 모달 (요금 계산) */}
+      {checkoutConfirm && feeInfo && (
+        <div className="modal-overlay" onClick={cancelCheckout}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxHeight: '90vh', overflowY: 'auto' }}>
+            <h3 style={{ marginBottom: '20px', color: '#333' }}>
+              💰 체크아웃 요금 안내
+            </h3>
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ marginBottom: '15px', padding: '15px', background: '#f8f9fa', borderRadius: '8px' }}>
+                <div style={{ marginBottom: '10px', fontSize: '1.1rem', fontWeight: '600', color: '#333' }}>
+                  🐕 {checkoutConfirm.dog_name}
+                </div>
+                <div style={{ fontSize: '0.9rem', color: '#666' }}>
+                  몸무게: {feeInfo.weight ? `${feeInfo.weight}kg` : '정보 없음'}
+                </div>
+                <div style={{ fontSize: '0.9rem', color: '#666' }}>
+                  이용 시간: {Math.floor(feeInfo.duration_minutes / 60)}시간 {feeInfo.duration_minutes % 60}분
+                </div>
+              </div>
+
+              {/* 호텔링 요금 표시 */}
+              {feeInfo.total_fee !== undefined && (
+                <div>
+                  {/* 요금 계산 상세 */}
+                  <div style={{ padding: '20px', background: '#e7f3ff', borderRadius: '8px', marginBottom: '15px' }}>
+                    <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '12px' }}>
+                      요금 계산 내역
+                    </div>
+                    <div style={{ fontSize: '0.85rem', color: '#666', lineHeight: '1.8' }}>
+                      {feeInfo.full_days > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                          <span>{feeInfo.full_days}일 × {feeInfo.price_per_day.toLocaleString()}원</span>
+                          <span style={{ fontWeight: '600' }}>{(feeInfo.full_days * feeInfo.price_per_day).toLocaleString()}원</span>
+                        </div>
+                      )}
+                      {feeInfo.remaining_minutes > 0 && (
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                            <span>초과 시간 ({Math.floor(feeInfo.remaining_minutes / 60)}시간 {feeInfo.remaining_minutes % 60}분)</span>
+                            <span style={{ fontWeight: '600' }}>{feeInfo.overtime_fee.toLocaleString()}원</span>
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: '#999', marginLeft: '10px', marginBottom: '5px' }}>
+                            (30분당 {feeInfo.price_per_30min.toLocaleString()}원 기준)
+                          </div>
+                        </div>
+                      )}
+                      <div style={{ 
+                        borderTop: '1px solid #ddd', 
+                        marginTop: '10px', 
+                        paddingTop: '10px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        fontSize: '0.95rem'
+                      }}>
+                        <span style={{ fontWeight: '600' }}>총 요금</span>
+                        <span style={{ fontWeight: '600', color: '#1976d2' }}>{feeInfo.total_fee.toLocaleString()}원</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 선결제 및 최종 금액 */}
+                  {feeInfo.prepaid_amount > 0 ? (
+                    <div style={{ padding: '20px', background: '#e8f5e9', borderRadius: '8px' }}>
+                      <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '12px' }}>
+                        결제 정보
+                      </div>
+                      <div style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.8' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                          <span>총 요금</span>
+                          <span>{feeInfo.total_fee.toLocaleString()}원</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', color: '#f57c00' }}>
+                          <span>선결제 금액</span>
+                          <span>- {feeInfo.prepaid_amount.toLocaleString()}원</span>
+                        </div>
+                        <div style={{ 
+                          borderTop: '2px solid #2e7d32', 
+                          marginTop: '10px', 
+                          paddingTop: '10px',
+                          display: 'flex',
+                          justifyContent: 'space-between'
+                        }}>
+                          <span style={{ fontSize: '1.1rem', fontWeight: '700', color: '#2e7d32' }}>
+                            최종 결제 금액
+                          </span>
+                          <span style={{ fontSize: '1.3rem', fontWeight: '700', color: '#2e7d32' }}>
+                            {feeInfo.remaining_fee.toLocaleString()}원
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ padding: '20px', background: '#e8f5e9', borderRadius: '8px' }}>
+                      <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '8px' }}>
+                        최종 결제 금액
+                      </div>
+                      <div style={{ fontSize: '1.3rem', fontWeight: '700', color: '#2e7d32' }}>
+                        {feeInfo.total_fee.toLocaleString()}원
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {feeInfo.message && (
+                <div style={{ padding: '20px', background: '#fff3cd', borderRadius: '8px', marginBottom: '15px' }}>
+                  <div style={{ fontSize: '0.9rem', color: '#856404' }}>
+                    {feeInfo.message}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={cancelCheckout}
+                className="btn"
+                style={{ flex: 1, background: '#6c757d', color: 'white' }}
+              >
+                취소
+              </button>
+              <button
+                onClick={() => {
+                  const visitId = getVisitId(checkoutConfirm.customer_id)
+                  confirmCheckout(visitId)
+                }}
+                className="btn btn-primary"
+                style={{ flex: 1 }}
+              >
+                확인 및 체크아웃
               </button>
             </div>
           </div>
