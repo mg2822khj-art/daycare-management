@@ -15,6 +15,7 @@ import {
   getVisitById,
   calculateDuration,
   calculateDaycareFee,
+  calculateHotelingFee,
   getCurrentVisit,
   getCustomerCurrentVisit,
   getVisitHistory,
@@ -239,7 +240,7 @@ app.post('/api/checkout/calculate', (req, res) => {
     // 데이터베이스 함수를 사용하여 한국 시간으로 계산
     const duration_minutes = calculateDuration(visit.check_in);
 
-    // 데이케어만 요금 계산
+    // 데이케어 요금 계산
     if (visit.visit_type === 'daycare') {
       const feeInfo = calculateDaycareFee(visit.weight, duration_minutes);
       return res.json({
@@ -249,18 +250,23 @@ app.post('/api/checkout/calculate', (req, res) => {
         duration_minutes,
         check_in: visit.check_in,
         dog_name: visit.dog_name,
-        customer_name: visit.customer_name
+        customer_name: visit.customer_name,
+        prepaid: visit.prepaid || 0,
+        prepaid_amount: visit.prepaid_amount || 0
       });
     } else {
-      // 호텔링은 요금 계산 안 함
+      // 호텔링 요금 계산
+      const feeInfo = calculateHotelingFee(visit.weight, duration_minutes, visit.prepaid_amount || 0);
       return res.json({
         success: true,
         visit_type: 'hoteling',
-        fee_info: null,
+        fee_info: feeInfo,
         duration_minutes,
         check_in: visit.check_in,
         dog_name: visit.dog_name,
-        customer_name: visit.customer_name
+        customer_name: visit.customer_name,
+        prepaid: visit.prepaid || 0,
+        prepaid_amount: visit.prepaid_amount || 0
       });
     }
   } catch (error) {

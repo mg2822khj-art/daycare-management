@@ -544,6 +544,15 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
                     <div>보호자: {visit.customer_name}</div>
                     <div>체크인: {formatDateTime(visit.check_in)}</div>
                     <div>경과시간: {getElapsedTime(visit.check_in)}</div>
+                    {visit.prepaid && visit.prepaid_amount > 0 && (
+                      <div style={{ 
+                        color: '#f57c00', 
+                        fontWeight: '600',
+                        marginTop: '5px'
+                      }}>
+                        💰 선결제: {visit.prepaid_amount.toLocaleString()}원
+                      </div>
+                    )}
                   </small>
                 </div>
                 <div style={{ 
@@ -670,7 +679,7 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
         </div>
       )}
 
-      {/* 체크아웃 확인 모달 (데이케어 요금 계산) */}
+      {/* 체크아웃 확인 모달 (요금 계산) */}
       {checkoutConfirm && feeInfo && (
         <div style={{
           position: 'fixed',
@@ -690,6 +699,8 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
             borderRadius: '12px',
             maxWidth: '500px',
             width: '90%',
+            maxHeight: '90vh',
+            overflowY: 'auto',
             boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
           }} onClick={(e) => e.stopPropagation()}>
             <h3 style={{ marginBottom: '20px', color: '#333' }}>
@@ -708,7 +719,8 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
                 </div>
               </div>
 
-              {feeInfo.fee > 0 ? (
+              {/* 데이케어 요금 표시 */}
+              {visitType === 'daycare' && feeInfo.fee > 0 && (
                 <div style={{ padding: '20px', background: '#e8f5e9', borderRadius: '8px', marginBottom: '15px' }}>
                   <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '8px' }}>
                     요금 계산
@@ -729,10 +741,97 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
                     )}
                   </div>
                 </div>
-              ) : (
+              )}
+
+              {/* 호텔링 요금 표시 */}
+              {visitType === 'hoteling' && feeInfo.total_fee !== undefined && (
+                <div>
+                  {/* 요금 계산 상세 */}
+                  <div style={{ padding: '20px', background: '#e7f3ff', borderRadius: '8px', marginBottom: '15px' }}>
+                    <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '12px' }}>
+                      요금 계산 내역
+                    </div>
+                    <div style={{ fontSize: '0.85rem', color: '#666', lineHeight: '1.8' }}>
+                      {feeInfo.full_days > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                          <span>{feeInfo.full_days}일 × {feeInfo.price_per_day.toLocaleString()}원</span>
+                          <span style={{ fontWeight: '600' }}>{(feeInfo.full_days * feeInfo.price_per_day).toLocaleString()}원</span>
+                        </div>
+                      )}
+                      {feeInfo.remaining_minutes > 0 && (
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                            <span>초과 시간 ({Math.floor(feeInfo.remaining_minutes / 60)}시간 {feeInfo.remaining_minutes % 60}분)</span>
+                            <span style={{ fontWeight: '600' }}>{feeInfo.overtime_fee.toLocaleString()}원</span>
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: '#999', marginLeft: '10px', marginBottom: '5px' }}>
+                            (30분당 {feeInfo.price_per_30min.toLocaleString()}원 기준)
+                          </div>
+                        </div>
+                      )}
+                      <div style={{ 
+                        borderTop: '1px solid #ddd', 
+                        marginTop: '10px', 
+                        paddingTop: '10px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        fontSize: '0.95rem'
+                      }}>
+                        <span style={{ fontWeight: '600' }}>총 요금</span>
+                        <span style={{ fontWeight: '600', color: '#1976d2' }}>{feeInfo.total_fee.toLocaleString()}원</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 선결제 및 최종 금액 */}
+                  {feeInfo.prepaid_amount > 0 ? (
+                    <div style={{ padding: '20px', background: '#e8f5e9', borderRadius: '8px' }}>
+                      <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '12px' }}>
+                        결제 정보
+                      </div>
+                      <div style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.8' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                          <span>총 요금</span>
+                          <span>{feeInfo.total_fee.toLocaleString()}원</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', color: '#f57c00' }}>
+                          <span>선결제 금액</span>
+                          <span>- {feeInfo.prepaid_amount.toLocaleString()}원</span>
+                        </div>
+                        <div style={{ 
+                          borderTop: '2px solid #2e7d32', 
+                          marginTop: '10px', 
+                          paddingTop: '10px',
+                          display: 'flex',
+                          justifyContent: 'space-between'
+                        }}>
+                          <span style={{ fontSize: '1.1rem', fontWeight: '700', color: '#2e7d32' }}>
+                            최종 결제 금액
+                          </span>
+                          <span style={{ fontSize: '1.3rem', fontWeight: '700', color: '#2e7d32' }}>
+                            {feeInfo.remaining_fee.toLocaleString()}원
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ padding: '20px', background: '#e8f5e9', borderRadius: '8px' }}>
+                      <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '8px' }}>
+                        최종 결제 금액
+                      </div>
+                      <div style={{ fontSize: '1.3rem', fontWeight: '700', color: '#2e7d32' }}>
+                        {feeInfo.total_fee.toLocaleString()}원
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 에러 메시지 */}
+              {feeInfo.message && (
                 <div style={{ padding: '20px', background: '#fff3cd', borderRadius: '8px', marginBottom: '15px' }}>
                   <div style={{ fontSize: '0.9rem', color: '#856404' }}>
-                    {feeInfo.message || '요금 계산 정보가 없습니다.'}
+                    {feeInfo.message}
                   </div>
                 </div>
               )}

@@ -491,6 +491,71 @@ export function calculateDaycareFee(weight, duration_minutes) {
   };
 }
 
+// 호텔링 요금 계산 (1일 기준, 초과 시간은 30분당 데이케어 요금)
+export function calculateHotelingFee(weight, duration_minutes, prepaid_amount = 0) {
+  if (!weight || weight < 2) {
+    return { 
+      total_fee: 0, 
+      remaining_fee: 0,
+      message: '몸무게 정보가 없거나 2kg 미만입니다.' 
+    };
+  }
+
+  // 1일(24시간) 호텔링 요금 및 데이케어 30분 요금
+  let pricePerDay = 0;
+  let pricePer30min = 0;
+  
+  if (weight >= 2 && weight <= 7) {
+    pricePerDay = 44000;
+    pricePer30min = 2500;
+  } else if (weight > 7 && weight <= 15) {
+    pricePerDay = 55000;
+    pricePer30min = 3000;
+  } else if (weight > 15) {
+    pricePerDay = 66000;
+    pricePer30min = 3500;
+  }
+
+  // 1일 = 1440분 (24시간)
+  const minutesPerDay = 1440;
+  const fullDays = Math.floor(duration_minutes / minutesPerDay);
+  const remainingMinutes = duration_minutes % minutesPerDay;
+  
+  // 기본 일수 요금
+  let totalFee = fullDays * pricePerDay;
+  
+  // 초과 시간 계산 (30분 단위)
+  let overtimeFee = 0;
+  if (remainingMinutes > 0) {
+    // 30분 단위로 올림
+    const halfHours = Math.ceil(remainingMinutes / 30);
+    overtimeFee = halfHours * pricePer30min;
+    
+    // 초과 요금이 1일 호텔링 요금을 넘으면 1일 호텔링 요금으로 대체
+    if (overtimeFee > pricePerDay) {
+      overtimeFee = pricePerDay;
+    }
+  }
+  
+  totalFee += overtimeFee;
+  
+  // 선결제 금액 차감
+  const remainingFee = Math.max(0, totalFee - prepaid_amount);
+
+  return {
+    total_fee: totalFee,
+    prepaid_amount: prepaid_amount,
+    remaining_fee: remainingFee,
+    full_days: fullDays,
+    remaining_minutes: remainingMinutes,
+    overtime_fee: overtimeFee,
+    price_per_day: pricePerDay,
+    price_per_30min: pricePer30min,
+    duration_minutes: duration_minutes,
+    weight: weight
+  };
+}
+
 // 체크아웃 (한국 시간 KST, UTC+9)
 export function checkOut(visit_id) {
   const stmt = db.prepare(`
