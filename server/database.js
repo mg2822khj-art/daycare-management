@@ -86,6 +86,18 @@ try {
       console.log('⚠️ visits 테이블에 deleted_at 컬럼이 없습니다.');
       needRecreate = true;
     }
+    // prepaid 컬럼 확인 및 추가
+    if (createSQL && !createSQL.includes('prepaid')) {
+      console.log('⚠️ visits 테이블에 prepaid 컬럼이 없습니다. 추가합니다...');
+      try {
+        db.run('ALTER TABLE visits ADD COLUMN prepaid INTEGER DEFAULT 0');
+        db.run('ALTER TABLE visits ADD COLUMN prepaid_amount REAL DEFAULT 0');
+        saveDatabase();
+        console.log('✅ prepaid 컬럼 추가 완료');
+      } catch (e) {
+        console.log('prepaid 컬럼 추가 중 오류 (무시됨):', e.message);
+      }
+    }
   }
   
   if (needRecreate) {
@@ -120,6 +132,8 @@ db.run(`
     check_in DATETIME NOT NULL,
     check_out DATETIME,
     duration_minutes INTEGER,
+    prepaid INTEGER DEFAULT 0,
+    prepaid_amount REAL DEFAULT 0,
     deleted_at DATETIME DEFAULT NULL,
     FOREIGN KEY (customer_id) REFERENCES customers (id)
   );
@@ -320,10 +334,10 @@ export function getAllCustomers() {
   }
 }
 
-// 체크인 (한국 시간 KST, UTC+9, 타입 구분)
-export function checkIn(customer_id, visit_type = 'daycare') {
-  const stmt = db.prepare("INSERT INTO visits (customer_id, visit_type, check_in) VALUES (?, ?, datetime('now', '+9 hours'))");
-  stmt.bind([customer_id, visit_type]);
+// 체크인 (한국 시간 KST, UTC+9, 타입 구분, 선결제 정보)
+export function checkIn(customer_id, visit_type = 'daycare', prepaid = 0, prepaid_amount = 0) {
+  const stmt = db.prepare("INSERT INTO visits (customer_id, visit_type, check_in, prepaid, prepaid_amount) VALUES (?, ?, datetime('now', '+9 hours'), ?, ?)");
+  stmt.bind([customer_id, visit_type, prepaid ? 1 : 0, prepaid_amount || 0]);
   stmt.step();
   stmt.free();
   saveDatabase();

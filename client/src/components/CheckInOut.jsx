@@ -18,6 +18,8 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
   const [editCheckInTime, setEditCheckInTime] = useState('')
   const [checkoutConfirm, setCheckoutConfirm] = useState(null)
   const [feeInfo, setFeeInfo] = useState(null)
+  const [prepaid, setPrepaid] = useState(false)
+  const [prepaidAmount, setPrepaidAmount] = useState('')
   const autoCompleteRef = useRef(null)
 
   // 현재 타입의 방문만 필터링
@@ -109,16 +111,26 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
     setMessage({ type: '', text: '' })
 
     try {
-      const response = await axios.post(`${API_URL}/checkin`, {
+      const checkInData = {
         customer_id: customer.id,
         visit_type: visitType
-      })
+      }
+
+      // 호텔링이고 선결제가 체크된 경우에만 선결제 정보 추가
+      if (visitType === 'hoteling' && prepaid) {
+        checkInData.prepaid = true
+        checkInData.prepaid_amount = parseFloat(prepaidAmount) || 0
+      }
+
+      const response = await axios.post(`${API_URL}/checkin`, checkInData)
 
       setMessage({ type: 'success', text: response.data.message })
       setDogName('')
       setSearchResults([])
       setShowResults(false)
       setAutoCompleteResults([])
+      setPrepaid(false)
+      setPrepaidAmount('')
       onRefresh()
     } catch (error) {
       setMessage({
@@ -422,6 +434,62 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
                       <div>연락처: {customer.phone}</div>
                     </div>
                   </div>
+
+                  {/* 호텔링일 때만 선결제 옵션 표시 */}
+                  {visitType === 'hoteling' && (
+                    <div style={{ 
+                      padding: '12px', 
+                      background: 'white', 
+                      borderRadius: '8px',
+                      border: '1px solid #e0e0e0'
+                    }}>
+                      <label style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '8px',
+                        cursor: 'pointer',
+                        marginBottom: prepaid ? '10px' : '0'
+                      }}>
+                        <input
+                          type="checkbox"
+                          checked={prepaid}
+                          onChange={(e) => {
+                            setPrepaid(e.target.checked)
+                            if (!e.target.checked) {
+                              setPrepaidAmount('')
+                            }
+                          }}
+                          style={{
+                            width: '18px',
+                            height: '18px',
+                            cursor: 'pointer'
+                          }}
+                        />
+                        <span style={{ fontWeight: '600', color: '#333' }}>
+                          💰 선결제
+                        </span>
+                      </label>
+
+                      {prepaid && (
+                        <div style={{ marginTop: '8px' }}>
+                          <input
+                            type="number"
+                            value={prepaidAmount}
+                            onChange={(e) => setPrepaidAmount(e.target.value)}
+                            placeholder="선결제 금액 (원)"
+                            style={{
+                              width: '100%',
+                              padding: '10px',
+                              border: '2px solid #667eea',
+                              borderRadius: '6px',
+                              fontSize: '1rem'
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <button
                     className="btn btn-success"
                     onClick={() => handleCheckIn(customer)}

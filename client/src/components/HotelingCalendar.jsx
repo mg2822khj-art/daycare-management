@@ -16,6 +16,10 @@ function HotelingCalendar({ onRefresh }) {
   const [searchTerm, setSearchTerm] = useState('')
   const [searchResults, setSearchResults] = useState([])
   const [isSearching, setIsSearching] = useState(false)
+  const [showCheckInModal, setShowCheckInModal] = useState(false)
+  const [checkInReservation, setCheckInReservation] = useState(null)
+  const [prepaid, setPrepaid] = useState(false)
+  const [prepaidAmount, setPrepaidAmount] = useState('')
   
   // 예약 폼 데이터
   const [formData, setFormData] = useState({
@@ -211,19 +215,35 @@ function HotelingCalendar({ onRefresh }) {
     return visit ? visit.id : null
   }
 
+  // 체크인 모달 열기
+  const handleCheckIn = (reservation) => {
+    setCheckInReservation(reservation)
+    setPrepaid(false)
+    setPrepaidAmount('')
+    setShowCheckInModal(true)
+  }
+
   // 체크인 처리
-  const handleCheckIn = async (reservation) => {
-    if (!window.confirm(`"${reservation.dog_name}" 체크인 하시겠습니까?`)) {
-      return
-    }
+  const handleConfirmCheckIn = async () => {
+    if (!checkInReservation) return
 
     try {
-      await axios.post(`${API_URL}/checkin`, {
-        customer_id: reservation.customer_id,
+      const checkInData = {
+        customer_id: checkInReservation.customer_id,
         visit_type: 'hoteling'
-      })
+      }
+
+      // 선결제가 체크된 경우에만 선결제 정보 추가
+      if (prepaid) {
+        checkInData.prepaid = true
+        checkInData.prepaid_amount = parseFloat(prepaidAmount) || 0
+      }
+
+      await axios.post(`${API_URL}/checkin`, checkInData)
       
-      alert(`${reservation.dog_name} 체크인 완료!`)
+      alert(`${checkInReservation.dog_name} 체크인 완료!`)
+      setShowCheckInModal(false)
+      setCheckInReservation(null)
       fetchCurrentVisits()
       if (onRefresh) onRefresh() // 호텔링 탭 새로고침
     } catch (error) {
@@ -643,6 +663,111 @@ function HotelingCalendar({ onRefresh }) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 체크인 모달 */}
+      {showCheckInModal && checkInReservation && (
+        <div className="modal-overlay" onClick={() => setShowCheckInModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ marginBottom: '20px' }}>호텔링 체크인</h3>
+            
+            <div style={{ 
+              padding: '15px',
+              background: '#f8f9fa',
+              borderRadius: '8px',
+              marginBottom: '20px'
+            }}>
+              <div style={{ fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '8px' }}>
+                🐕 {checkInReservation.dog_name}
+              </div>
+              <div style={{ color: '#666', fontSize: '0.9rem' }}>
+                보호자: {checkInReservation.customer_name}
+              </div>
+              <div style={{ color: '#666', fontSize: '0.9rem' }}>
+                견종: {checkInReservation.breed}
+              </div>
+            </div>
+
+            <div style={{ 
+              padding: '15px', 
+              background: 'white', 
+              borderRadius: '8px',
+              border: '2px solid #e0e0e0',
+              marginBottom: '20px'
+            }}>
+              <label style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '10px',
+                cursor: 'pointer',
+                marginBottom: prepaid ? '15px' : '0'
+              }}>
+                <input
+                  type="checkbox"
+                  checked={prepaid}
+                  onChange={(e) => {
+                    setPrepaid(e.target.checked)
+                    if (!e.target.checked) {
+                      setPrepaidAmount('')
+                    }
+                  }}
+                  style={{
+                    width: '20px',
+                    height: '20px',
+                    cursor: 'pointer'
+                  }}
+                />
+                <span style={{ fontWeight: '600', color: '#333', fontSize: '1rem' }}>
+                  💰 선결제
+                </span>
+              </label>
+
+              {prepaid && (
+                <div>
+                  <label style={{ 
+                    display: 'block', 
+                    marginBottom: '8px',
+                    fontWeight: '500',
+                    color: '#666'
+                  }}>
+                    선결제 금액
+                  </label>
+                  <input
+                    type="number"
+                    value={prepaidAmount}
+                    onChange={(e) => setPrepaidAmount(e.target.value)}
+                    placeholder="금액을 입력하세요 (원)"
+                    className="form-input"
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      border: '2px solid #667eea',
+                      borderRadius: '8px',
+                      fontSize: '1rem'
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                className="btn btn-success"
+                onClick={handleConfirmCheckIn}
+                style={{ flex: 1 }}
+              >
+                체크인 완료
+              </button>
+              <button
+                className="btn"
+                onClick={() => setShowCheckInModal(false)}
+                style={{ flex: 1, background: '#6c757d', color: 'white' }}
+              >
+                취소
+              </button>
+            </div>
           </div>
         </div>
       )}

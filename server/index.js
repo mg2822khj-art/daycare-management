@@ -125,10 +125,10 @@ app.get('/api/customers/autocomplete', (req, res) => {
   }
 });
 
-// 체크인 (타입 구분: daycare/hoteling)
+// 체크인 (타입 구분: daycare/hoteling, 선결제 정보)
 app.post('/api/checkin', (req, res) => {
   try {
-    const { customer_id, visit_type = 'daycare' } = req.body;
+    const { customer_id, visit_type = 'daycare', prepaid = false, prepaid_amount = 0 } = req.body;
     
     if (!customer_id) {
       return res.status(400).json({ error: '고객을 선택해주세요.' });
@@ -150,14 +150,19 @@ app.post('/api/checkin', (req, res) => {
       return res.status(400).json({ error: '이미 체크인 중입니다.' });
     }
 
+    // 선결제 금액 검증
+    const finalPrepaidAmount = prepaid && prepaid_amount ? parseFloat(prepaid_amount) : 0;
+
     // 체크인
-    const result = checkIn(customer.id, visit_type);
+    const result = checkIn(customer.id, visit_type, prepaid, finalPrepaidAmount);
     const typeLabel = visit_type === 'daycare' ? '데이케어' : '호텔링';
     res.json({ 
       success: true, 
       visit_id: result.lastInsertRowid,
       customer: customer,
       visit_type: visit_type,
+      prepaid: prepaid,
+      prepaid_amount: finalPrepaidAmount,
       message: `${customer.dog_name} (${customer.customer_name}님) ${typeLabel} 체크인 완료!`
     });
   } catch (error) {
