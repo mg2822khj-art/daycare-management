@@ -1208,7 +1208,7 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
               {/* 고객 검색 */}
               <div className="form-group">
                 <label>고객 검색 *</label>
-                <div style={{ position: 'relative' }}>
+                <div style={{ position: 'relative' }} ref={autoCompleteRef}>
                   <input
                     type="text"
                     placeholder="반려견 이름, 보호자명, 연락처로 검색"
@@ -1236,7 +1236,7 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
                       maxHeight: '300px',
                       overflowY: 'auto',
                       boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                      zIndex: 1000
+                      zIndex: 10000
                     }}>
                       {autoCompleteResults.map((customer) => (
                         <div
@@ -1246,7 +1246,8 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
                             padding: '12px 15px',
                             cursor: 'pointer',
                             borderBottom: '1px solid #e0e0e0',
-                            transition: 'background 0.2s'
+                            transition: 'background 0.2s',
+                            background: 'white'
                           }}
                           onMouseEnter={(e) => {
                             e.currentTarget.style.background = '#f8f9fa'
