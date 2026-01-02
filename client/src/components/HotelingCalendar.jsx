@@ -5,10 +5,11 @@ import 'react-calendar/dist/Calendar.css'
 
 const API_URL = '/api'
 
-function HotelingCalendar() {
+function HotelingCalendar({ onRefresh }) {
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [reservations, setReservations] = useState([])
   const [currentMonthReservations, setCurrentMonthReservations] = useState([])
+  const [currentVisits, setCurrentVisits] = useState([])
   const [showAddModal, setShowAddModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [selectedReservation, setSelectedReservation] = useState(null)
@@ -29,12 +30,23 @@ function HotelingCalendar() {
   // 현재 월의 예약 불러오기
   useEffect(() => {
     fetchMonthReservations(selectedDate)
+    fetchCurrentVisits()
   }, [selectedDate])
 
   // 선택한 날짜의 예약 불러오기
   useEffect(() => {
     fetchDateReservations(selectedDate)
   }, [selectedDate, currentMonthReservations])
+
+  // 현재 체크인 목록 불러오기
+  const fetchCurrentVisits = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/current-visits`)
+      setCurrentVisits(response.data)
+    } catch (error) {
+      console.error('체크인 목록 조회 실패:', error)
+    }
+  }
 
   const fetchMonthReservations = async (date) => {
     try {
@@ -184,6 +196,66 @@ function HotelingCalendar() {
     }
   }
 
+  // 체크인 상태 확인
+  const isCheckedIn = (customerId) => {
+    return currentVisits.some(visit => 
+      visit.customer_id === customerId && visit.visit_type === 'hoteling'
+    )
+  }
+
+  // 체크인된 visit ID 찾기
+  const getVisitId = (customerId) => {
+    const visit = currentVisits.find(visit => 
+      visit.customer_id === customerId && visit.visit_type === 'hoteling'
+    )
+    return visit ? visit.id : null
+  }
+
+  // 체크인 처리
+  const handleCheckIn = async (reservation) => {
+    if (!window.confirm(`"${reservation.dog_name}" 체크인 하시겠습니까?`)) {
+      return
+    }
+
+    try {
+      await axios.post(`${API_URL}/checkin`, {
+        customer_id: reservation.customer_id,
+        visit_type: 'hoteling'
+      })
+      
+      alert(`${reservation.dog_name} 체크인 완료!`)
+      fetchCurrentVisits()
+      if (onRefresh) onRefresh() // 호텔링 탭 새로고침
+    } catch (error) {
+      alert(error.response?.data?.error || '체크인 중 오류가 발생했습니다.')
+    }
+  }
+
+  // 체크아웃 처리
+  const handleCheckOut = async (reservation) => {
+    const visitId = getVisitId(reservation.customer_id)
+    if (!visitId) {
+      alert('체크인 정보를 찾을 수 없습니다.')
+      return
+    }
+
+    if (!window.confirm(`"${reservation.dog_name}" 체크아웃 하시겠습니까?`)) {
+      return
+    }
+
+    try {
+      await axios.post(`${API_URL}/checkout`, {
+        visit_id: visitId
+      })
+      
+      alert(`${reservation.dog_name} 체크아웃 완료!`)
+      fetchCurrentVisits()
+      if (onRefresh) onRefresh() // 호텔링 탭 새로고침
+    } catch (error) {
+      alert(error.response?.data?.error || '체크아웃 중 오류가 발생했습니다.')
+    }
+  }
+
   // 캘린더 타일에 예약 표시
   const tileContent = ({ date, view }) => {
     if (view === 'month') {
@@ -279,47 +351,127 @@ function HotelingCalendar() {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {reservations.map(reservation => (
-                <div
-                  key={reservation.id}
-                  style={{
-                    padding: '15px',
-                    background: '#f8f9fa',
-                    borderRadius: '8px',
-                    border: '2px solid #667eea',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s'
-                  }}
-                  onClick={() => handleEditReservation(reservation)}
-                  onMouseEnter={(e) => e.currentTarget.style.background = '#e7f3ff'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = '#f8f9fa'}
-                >
-                  <div style={{ fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '5px' }}>
-                    🐕 {reservation.dog_name}
-                  </div>
-                  <div style={{ color: '#666', marginBottom: '5px' }}>
-                    보호자: {reservation.customer_name}
-                  </div>
-                  <div style={{ color: '#666', marginBottom: '5px' }}>
-                    견종: {reservation.breed}
-                  </div>
-                  <div style={{ color: '#667eea', fontWeight: '600', marginBottom: '5px' }}>
-                    {formatDate(reservation.start_date)} ~ {formatDate(reservation.end_date)}
-                    ({calculateNights(reservation.start_date, reservation.end_date)}박)
-                  </div>
-                  {reservation.notes && (
-                    <div style={{ 
-                      marginTop: '8px',
-                      padding: '8px',
-                      background: 'white',
-                      borderRadius: '4px',
-                      fontSize: '0.9rem'
-                    }}>
-                      📝 {reservation.notes}
+              {reservations.map(reservation => {
+                const checkedIn = isCheckedIn(reservation.customer_id)
+                return (
+                  <div
+                    key={reservation.id}
+                    style={{
+                      padding: '15px',
+                      background: checkedIn ? '#e7ffe7' : '#f8f9fa',
+                      borderRadius: '8px',
+                      border: `2px solid ${checkedIn ? '#28a745' : '#667eea'}`,
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    <div 
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => handleEditReservation(reservation)}
+                    >
+                      <div style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'space-between',
+                        marginBottom: '8px'
+                      }}>
+                        <div style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>
+                          🐕 {reservation.dog_name}
+                        </div>
+                        {checkedIn && (
+                          <span style={{
+                            background: '#28a745',
+                            color: 'white',
+                            padding: '4px 12px',
+                            borderRadius: '12px',
+                            fontSize: '0.85rem',
+                            fontWeight: '600'
+                          }}>
+                            체크인 중
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ color: '#666', marginBottom: '5px' }}>
+                        보호자: {reservation.customer_name}
+                      </div>
+                      <div style={{ color: '#666', marginBottom: '5px' }}>
+                        견종: {reservation.breed}
+                      </div>
+                      <div style={{ color: '#667eea', fontWeight: '600', marginBottom: '5px' }}>
+                        {formatDate(reservation.start_date)} ~ {formatDate(reservation.end_date)}
+                        ({calculateNights(reservation.start_date, reservation.end_date)}박)
+                      </div>
+                      {reservation.notes && (
+                        <div style={{ 
+                          marginTop: '8px',
+                          padding: '8px',
+                          background: 'white',
+                          borderRadius: '4px',
+                          fontSize: '0.9rem'
+                        }}>
+                          📝 {reservation.notes}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              ))}
+                    
+                    {/* 체크인/체크아웃 버튼 */}
+                    <div style={{ 
+                      marginTop: '12px',
+                      paddingTop: '12px',
+                      borderTop: '1px solid #e0e0e0',
+                      display: 'flex',
+                      gap: '8px'
+                    }}>
+                      {checkedIn ? (
+                        <button
+                          className="btn btn-danger"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleCheckOut(reservation)
+                          }}
+                          style={{
+                            flex: 1,
+                            padding: '10px',
+                            fontSize: '0.95rem'
+                          }}
+                        >
+                          🚪 체크아웃
+                        </button>
+                      ) : (
+                        <button
+                          className="btn btn-success"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleCheckIn(reservation)
+                          }}
+                          style={{
+                            flex: 1,
+                            padding: '10px',
+                            fontSize: '0.95rem'
+                          }}
+                        >
+                          🏠 체크인
+                        </button>
+                      )}
+                      <button
+                        className="btn"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleEditReservation(reservation)
+                        }}
+                        style={{
+                          flex: 1,
+                          padding: '10px',
+                          fontSize: '0.95rem',
+                          background: '#6c757d',
+                          color: 'white'
+                        }}
+                      >
+                        ✏️ 수정
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>

@@ -123,7 +123,7 @@ function App() {
         )}
 
         {activeTab === 'calendar' && (
-          <HotelingCalendar />
+          <HotelingCalendar onRefresh={handleRefresh} />
         )}
 
         {activeTab === 'history' && (
