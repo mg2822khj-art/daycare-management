@@ -340,6 +340,7 @@ function HotelingCalendar({ onRefresh }) {
       setEditingVisit(null)
       setEditCheckInTime('')
       fetchCurrentVisits()
+      fetchMonthReservations(selectedDate) // 캘린더 갱신
       if (onRefresh) onRefresh()
     } catch (error) {
       alert(error.response?.data?.error || '시간 수정 중 오류가 발생했습니다.')
@@ -427,6 +428,33 @@ function HotelingCalendar({ onRefresh }) {
         🗓️ 호텔링 예약 캘린더
       </h2>
 
+      {/* 캘린더 영역 (맨 위) */}
+      <div style={{ marginBottom: '30px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <Calendar
+          onChange={setSelectedDate}
+          value={selectedDate}
+          tileContent={tileContent}
+          locale="ko-KR"
+          onActiveStartDateChange={({ activeStartDate }) => {
+            if (activeStartDate) {
+              fetchMonthReservations(activeStartDate)
+            }
+          }}
+        />
+        
+        <button
+          className="btn btn-primary"
+          onClick={handleAddReservation}
+          style={{ 
+            marginTop: '20px',
+            padding: '12px 30px',
+            fontSize: '1rem'
+          }}
+        >
+          ➕ 예약 추가
+        </button>
+      </div>
+
       {/* 현재 체크인 중인 목록 */}
       {currentVisits.length > 0 && (
         <div style={{ marginBottom: '30px', padding: '20px', background: '#f0f8ff', borderRadius: '12px', border: '2px solid #667eea' }}>
@@ -496,47 +524,18 @@ function HotelingCalendar({ onRefresh }) {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: '30px', flexWrap: 'wrap' }}>
-        {/* 캘린더 영역 */}
-        <div style={{ flex: '1', minWidth: '300px' }}>
-          <Calendar
-            onChange={setSelectedDate}
-            value={selectedDate}
-            tileContent={tileContent}
-            locale="ko-KR"
-            onActiveStartDateChange={({ activeStartDate }) => {
-              if (activeStartDate) {
-                fetchMonthReservations(activeStartDate)
-              }
-            }}
-          />
-          
-          <button
-            className="btn btn-primary"
-            onClick={handleAddReservation}
-            style={{ 
-              marginTop: '20px',
-              width: '100%',
-              padding: '12px',
-              fontSize: '1rem'
-            }}
-          >
-            ➕ 예약 추가
-          </button>
-        </div>
+      {/* 선택한 날짜의 예약 목록 */}
+      <div style={{ marginBottom: '30px' }}>
+        <h3 style={{ color: '#667eea', marginBottom: '15px' }}>
+          📋 {formatDate(selectedDate.toISOString().split('T')[0])} 예약 목록
+        </h3>
 
-        {/* 선택한 날짜의 예약 목록 */}
-        <div style={{ flex: '1', minWidth: '300px' }}>
-          <h3 style={{ color: '#667eea', marginBottom: '15px' }}>
-            {formatDate(selectedDate.toISOString().split('T')[0])} 예약 목록
-          </h3>
-
-          {reservations.length === 0 ? (
-            <div className="empty-state">
-              <p>이 날짜에 예약이 없습니다.</p>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {reservations.length === 0 ? (
+          <div className="empty-state">
+            <p>이 날짜에 예약이 없습니다.</p>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gap: '10px' }}>
               {reservations.map(reservation => {
                 const checkedIn = isCheckedIn(reservation.customer_id)
                 return (
@@ -677,9 +676,8 @@ function HotelingCalendar({ onRefresh }) {
                   </div>
                 )
               })}
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* 예약 추가 모달 */}
