@@ -474,15 +474,29 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
     setEditCheckInTime('')
   }
 
-  // 날짜/시간 포맷팅
+  // 날짜/시간 포맷팅 (과거 데이터를 위해 연도 포함)
   const formatDateTime = (datetime) => {
     const date = new Date(datetime)
-    return date.toLocaleString('ko-KR', {
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
+    const now = new Date()
+    const isCurrentYear = date.getFullYear() === now.getFullYear()
+    
+    // 올해 데이터면 연도 생략, 작년 이전 데이터면 연도 표시
+    if (isCurrentYear) {
+      return date.toLocaleString('ko-KR', {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    } else {
+      return date.toLocaleString('ko-KR', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    }
   }
 
   // 경과 시간 계산
@@ -807,37 +821,68 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
           <div>
             <h4 style={{ color: '#28a745', marginBottom: '10px', fontSize: '1rem' }}>
               ✅ {formatDateToString(selectedDate)} 호텔링 이용 내역 ({dateVisitHistory.length}건)
+              <span style={{ fontSize: '0.85rem', color: '#999', marginLeft: '10px', fontWeight: 'normal' }}>
+                (과거 데이터 포함)
+              </span>
             </h4>
             <div style={{ display: 'grid', gap: '10px' }}>
-              {dateVisitHistory.map(visit => (
-                <div
-                  key={visit.id}
-                  style={{
-                    padding: '15px',
-                    background: '#f0fdf4',
-                    borderRadius: '8px',
-                    border: '2px solid #28a745'
-                  }}
-                >
-                  <div style={{ fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '5px' }}>
-                    🐕 {visit.dog_name}
-                  </div>
-                  <div style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.6' }}>
-                    <div>보호자: {visit.customer_name}</div>
-                    <div>견종: {visit.breed}</div>
-                    <div>체크인: {formatDateTime(visit.check_in)}</div>
-                    <div>체크아웃: {formatDateTime(visit.check_out)}</div>
-                    <div style={{ color: '#28a745', fontWeight: '600' }}>
-                      이용시간: {Math.floor(visit.duration_minutes / 60)}시간 {visit.duration_minutes % 60}분
-                    </div>
-                    {visit.prepaid && visit.prepaid_amount > 0 && (
-                      <div style={{ color: '#f57c00', fontWeight: '600', marginTop: '5px' }}>
-                        💰 선결제: {visit.prepaid_amount.toLocaleString()}원
+              {dateVisitHistory.map(visit => {
+                // 과거 데이터 여부 확인 (작년 이전)
+                const checkInDate = new Date(visit.check_in)
+                const currentYear = new Date().getFullYear()
+                const isPastYear = checkInDate.getFullYear() < currentYear
+                
+                return (
+                  <div
+                    key={visit.id}
+                    style={{
+                      padding: '15px',
+                      background: isPastYear ? '#f0fdf4' : '#e7ffe7',
+                      borderRadius: '8px',
+                      border: `2px solid ${isPastYear ? '#86efac' : '#28a745'}`,
+                      position: 'relative'
+                    }}
+                  >
+                    {isPastYear && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '10px',
+                        right: '10px',
+                        background: '#86efac',
+                        color: '#166534',
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        fontSize: '0.75rem',
+                        fontWeight: '600'
+                      }}>
+                        {checkInDate.getFullYear()}년
                       </div>
                     )}
+                    <div style={{ fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '5px' }}>
+                      🐕 {visit.dog_name}
+                      {visit.weight && (
+                        <span style={{ fontSize: '0.85rem', color: '#666', fontWeight: 'normal', marginLeft: '8px' }}>
+                          ({visit.weight}kg)
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.6' }}>
+                      <div>보호자: {visit.customer_name}</div>
+                      <div>견종: {visit.breed}</div>
+                      <div>체크인: {formatDateTime(visit.check_in)}</div>
+                      <div>체크아웃: {formatDateTime(visit.check_out)}</div>
+                      <div style={{ color: '#28a745', fontWeight: '600' }}>
+                        이용시간: {Math.floor(visit.duration_minutes / 60)}시간 {visit.duration_minutes % 60}분
+                      </div>
+                      {visit.prepaid && visit.prepaid_amount > 0 && (
+                        <div style={{ color: '#f57c00', fontWeight: '600', marginTop: '5px' }}>
+                          💰 선결제: {visit.prepaid_amount.toLocaleString()}원
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         )}
