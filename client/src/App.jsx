@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 import CustomerRegistration from './components/CustomerRegistration'
 import CheckInOut from './components/CheckInOut'
@@ -13,6 +13,9 @@ function App() {
   const [activeTab, setActiveTab] = useState('daycare')
   const [customers, setCustomers] = useState([])
   const [currentVisits, setCurrentVisits] = useState([])
+  const [refreshTrigger, setRefreshTrigger] = useState(0) // 새로고침 트리거
+  const calendarRef = useRef(null)
+  const hotelingRef = useRef(null)
 
   // 고객 목록 불러오기
   const fetchCustomers = async () => {
@@ -40,9 +43,12 @@ function App() {
     fetchCurrentVisits()
   }, [])
 
-  // 체크인/아웃 후 데이터 새로고침
+  // 체크인/아웃 또는 예약 변경 후 전체 새로고침
   const handleRefresh = () => {
+    console.log('🔄 전체 데이터 새로고침 실행')
     fetchCurrentVisits()
+    // 새로고침 트리거를 변경하여 자식 컴포넌트들이 감지하도록 함
+    setRefreshTrigger(prev => prev + 1)
   }
 
   return (
@@ -103,6 +109,7 @@ function App() {
             visitType="daycare"
             currentVisits={currentVisits}
             onRefresh={handleRefresh}
+            refreshTrigger={refreshTrigger}
           />
         )}
 
@@ -111,6 +118,7 @@ function App() {
             visitType="hoteling"
             currentVisits={currentVisits}
             onRefresh={handleRefresh}
+            refreshTrigger={refreshTrigger}
           />
         )}
 
@@ -123,7 +131,10 @@ function App() {
         )}
 
         {activeTab === 'calendar' && (
-          <HotelingCalendar onRefresh={handleRefresh} />
+          <HotelingCalendar 
+            onRefresh={handleRefresh} 
+            refreshTrigger={refreshTrigger}
+          />
         )}
 
         {activeTab === 'history' && (

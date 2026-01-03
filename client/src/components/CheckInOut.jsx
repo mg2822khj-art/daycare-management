@@ -3,7 +3,7 @@ import axios from 'axios'
 
 const API_URL = '/api'
 
-function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
+function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTrigger }) {
   const typeLabel = visitType === 'daycare' ? '데이케어' : '호텔링'
   const typeEmoji = visitType === 'daycare' ? '☀️' : '🌙'
   
@@ -28,6 +28,14 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
 
   // 현재 타입의 방문만 필터링
   const filteredVisits = currentVisits.filter(visit => visit.visit_type === visitType)
+
+  // refreshTrigger가 변경되면 데이터 새로고침
+  useEffect(() => {
+    if (refreshTrigger > 0 && visitType === 'hoteling') {
+      console.log('🔄 호텔링: refreshTrigger 감지, 예약 목록 새로고침', refreshTrigger)
+      fetchTodayReservations()
+    }
+  }, [refreshTrigger, visitType])
 
   // 호텔링일 때 오늘의 예약 불러오기
   useEffect(() => {

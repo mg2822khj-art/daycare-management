@@ -5,7 +5,7 @@ import 'react-calendar/dist/Calendar.css'
 
 const API_URL = '/api'
 
-function HotelingCalendar({ onRefresh }) {
+function HotelingCalendar({ onRefresh, refreshTrigger }) {
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [reservations, setReservations] = useState([])
   const [currentMonthReservations, setCurrentMonthReservations] = useState([])
@@ -36,6 +36,17 @@ function HotelingCalendar({ onRefresh }) {
     end_date: '',
     notes: ''
   })
+
+  // refreshTrigger가 변경되면 데이터 새로고침
+  useEffect(() => {
+    if (refreshTrigger > 0) {
+      console.log('🔄 캘린더: refreshTrigger 감지, 데이터 새로고침', refreshTrigger)
+      fetchCurrentVisits()
+      fetchMonthReservations(selectedDate)
+      fetchDateReservations(selectedDate)
+      fetchDateVisitHistory(selectedDate)
+    }
+  }, [refreshTrigger])
 
   // 현재 월의 예약 불러오기
   useEffect(() => {
@@ -221,6 +232,7 @@ function HotelingCalendar({ onRefresh }) {
       alert('예약이 등록되었습니다.')
       setShowAddModal(false)
       fetchMonthReservations(selectedDate)
+      onRefresh() // 호텔링 카테고리에도 반영
     } catch (error) {
       alert(error.response?.data?.error || '예약 등록 중 오류가 발생했습니다.')
     }
@@ -241,6 +253,7 @@ function HotelingCalendar({ onRefresh }) {
       alert('예약이 수정되었습니다.')
       setShowEditModal(false)
       fetchMonthReservations(selectedDate)
+      onRefresh() // 호텔링 카테고리에도 반영
     } catch (error) {
       alert(error.response?.data?.error || '예약 수정 중 오류가 발생했습니다.')
     }
@@ -257,6 +270,7 @@ function HotelingCalendar({ onRefresh }) {
       alert('예약이 삭제되었습니다.')
       setShowEditModal(false)
       fetchMonthReservations(selectedDate)
+      onRefresh() // 호텔링 카테고리에도 반영
     } catch (error) {
       alert(error.response?.data?.error || '예약 삭제 중 오류가 발생했습니다.')
     }
