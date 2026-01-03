@@ -66,9 +66,17 @@ function HotelingCalendar({ onRefresh }) {
   const fetchCurrentVisits = async () => {
     try {
       const response = await axios.get(`${API_URL}/current-visits`)
-      setCurrentVisits(response.data)
+      // 호텔링만 필터링하고 배열인지 확인
+      if (Array.isArray(response.data)) {
+        const hotelingVisits = response.data.filter(visit => visit.visit_type === 'hoteling')
+        setCurrentVisits(hotelingVisits)
+      } else {
+        console.error('API 응답이 배열이 아닙니다:', response.data)
+        setCurrentVisits([])
+      }
     } catch (error) {
       console.error('체크인 목록 조회 실패:', error)
+      setCurrentVisits([])
     }
   }
 
@@ -82,9 +90,16 @@ function HotelingCalendar({ onRefresh }) {
       const response = await axios.get(`${API_URL}/reservations`, {
         params: { start_date: firstDay, end_date: lastDay }
       })
-      setCurrentMonthReservations(response.data)
+      // 배열인지 확인
+      if (Array.isArray(response.data)) {
+        setCurrentMonthReservations(response.data)
+      } else {
+        console.error('API 응답이 배열이 아닙니다:', response.data)
+        setCurrentMonthReservations([])
+      }
     } catch (error) {
       console.error('예약 조회 실패:', error)
+      setCurrentMonthReservations([])
     }
   }
 
@@ -104,7 +119,13 @@ function HotelingCalendar({ onRefresh }) {
         params: { date: dateStr }
       })
       console.log('선택한 날짜의 호텔링 이용 기록:', response.data)
-      setDateVisitHistory(response.data)
+      // 응답이 배열인지 확인
+      if (Array.isArray(response.data)) {
+        setDateVisitHistory(response.data)
+      } else {
+        console.error('API 응답이 배열이 아닙니다:', response.data)
+        setDateVisitHistory([])
+      }
     } catch (error) {
       console.error('방문 기록 조회 실패:', error)
       setDateVisitHistory([])
@@ -123,7 +144,13 @@ function HotelingCalendar({ onRefresh }) {
     setIsSearching(true)
     try {
       const response = await axios.get(`${API_URL}/customers/search/${term.trim()}`)
-      setSearchResults(response.data)
+      // 배열인지 확인
+      if (Array.isArray(response.data)) {
+        setSearchResults(response.data)
+      } else {
+        console.error('API 응답이 배열이 아닙니다:', response.data)
+        setSearchResults([])
+      }
     } catch (error) {
       console.error('검색 실패:', error)
       setSearchResults([])
@@ -536,7 +563,7 @@ function HotelingCalendar({ onRefresh }) {
       </div>
 
       {/* 현재 체크인 중인 목록 */}
-      {currentVisits.length > 0 && (
+      {Array.isArray(currentVisits) && currentVisits.length > 0 && (
         <div style={{ marginBottom: '30px', padding: '20px', background: '#f0f8ff', borderRadius: '12px', border: '2px solid #667eea' }}>
           <h3 style={{ color: '#667eea', marginBottom: '15px' }}>
             🏠 현재 호텔링 중 ({currentVisits.length}마리)
@@ -611,7 +638,7 @@ function HotelingCalendar({ onRefresh }) {
         </h3>
 
         {/* 예약 목록 */}
-        {reservations.length > 0 && (
+        {Array.isArray(reservations) && reservations.length > 0 && (
           <div style={{ marginBottom: '20px' }}>
             <h4 style={{ color: '#667eea', marginBottom: '10px', fontSize: '1rem' }}>
               📅 예약 목록
@@ -762,7 +789,7 @@ function HotelingCalendar({ onRefresh }) {
         )}
 
         {/* 방문 기록 (호텔링 이용 완료) */}
-        {dateVisitHistory.length > 0 && (
+        {Array.isArray(dateVisitHistory) && dateVisitHistory.length > 0 && (
           <div>
             <h4 style={{ color: '#28a745', marginBottom: '10px', fontSize: '1rem' }}>
               ✅ {formatDateToString(selectedDate)} 호텔링 이용 내역 ({dateVisitHistory.length}건)
@@ -827,7 +854,7 @@ function HotelingCalendar({ onRefresh }) {
                   className="form-input"
                 />
                 
-                {isSearching && searchResults.length > 0 && (
+                {isSearching && Array.isArray(searchResults) && searchResults.length > 0 && (
                   <div className="search-results">
                     {searchResults.map(customer => (
                       <div
