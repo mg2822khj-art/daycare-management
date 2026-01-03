@@ -22,22 +22,9 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
   const [prepaid, setPrepaid] = useState(false)
   const [prepaidAmount, setPrepaidAmount] = useState('')
   const [todayReservations, setTodayReservations] = useState([])
-  const [showReservationModal, setShowReservationModal] = useState(false)
   const [showCheckInModal, setShowCheckInModal] = useState(false)
   const [selectedReservation, setSelectedReservation] = useState(null)
-  const [reservationForm, setReservationForm] = useState({
-    customer_id: '',
-    customer_name: '',
-    dog_name: '',
-    start_date: '',
-    end_date: '',
-    notes: ''
-  })
-  const [reservationSearchQuery, setReservationSearchQuery] = useState('') // 예약 모달 전용 검색어
-  const [reservationAutoComplete, setReservationAutoComplete] = useState([]) // 예약 모달 전용 자동완성 결과
-  const [showReservationAutoComplete, setShowReservationAutoComplete] = useState(false) // 예약 모달 전용 자동완성 표시
   const autoCompleteRef = useRef(null)
-  const reservationAutoCompleteRef = useRef(null) // 예약 모달 전용 ref
 
   // 현재 타입의 방문만 필터링
   const filteredVisits = currentVisits.filter(visit => visit.visit_type === visitType)
@@ -102,32 +89,6 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
     return () => clearTimeout(timeoutId)
   }, [dogName])
 
-  // 예약 모달 전용 자동완성 검색
-  useEffect(() => {
-    const searchReservationAutoComplete = async () => {
-      if (reservationSearchQuery.trim().length === 0) {
-        setReservationAutoComplete([])
-        setShowReservationAutoComplete(false)
-        return
-      }
-
-      try {
-        console.log('예약 모달 자동완성 검색 시작:', reservationSearchQuery.trim())
-        const response = await axios.get(`${API_URL}/customers/autocomplete?q=${encodeURIComponent(reservationSearchQuery.trim())}`)
-        console.log('예약 모달 자동완성 검색 결과:', response.data)
-        setReservationAutoComplete(response.data)
-        setShowReservationAutoComplete(response.data.length > 0)
-      } catch (error) {
-        console.error('예약 모달 자동완성 검색 실패:', error)
-        setReservationAutoComplete([])
-        setShowReservationAutoComplete(false)
-      }
-    }
-
-    const timeoutId = setTimeout(searchReservationAutoComplete, 100)
-    return () => clearTimeout(timeoutId)
-  }, [reservationSearchQuery])
-
   // 외부 클릭 감지 (자동완성 닫기)
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -135,16 +96,11 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
       if (autoCompleteRef.current && !autoCompleteRef.current.contains(event.target)) {
         setShowAutoComplete(false)
       }
-      
-      // 예약 모달 자동완성 닫기 (모달이 열려있을 때만)
-      if (showReservationModal && reservationAutoCompleteRef.current && !reservationAutoCompleteRef.current.contains(event.target)) {
-        setShowReservationAutoComplete(false)
-      }
     }
 
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [showReservationModal])
+  }, [])
 
   const handleSearch = async (e) => {
     e.preventDefault()
@@ -259,60 +215,6 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
     }
   }
 
-  // 예약 추가 모달 열기
-  const handleAddReservation = () => {
-    const today = new Date().toISOString().split('T')[0]
-    setReservationForm({
-      customer_id: '',
-      customer_name: '',
-      dog_name: '',
-      start_date: today,
-      end_date: today,
-      notes: ''
-    })
-    // 예약 모달 전용 자동완성 초기화
-    setReservationSearchQuery('')
-    setReservationAutoComplete([])
-    setShowReservationAutoComplete(false)
-    setShowReservationModal(true)
-  }
-
-  // 예약 추가
-  const handleCreateReservation = async (e) => {
-    e.preventDefault()
-    
-    if (!reservationForm.customer_id) {
-      alert('고객을 선택해주세요.')
-      return
-    }
-
-    try {
-      await axios.post(`${API_URL}/reservations`, {
-        customer_id: reservationForm.customer_id,
-        start_date: reservationForm.start_date,
-        end_date: reservationForm.end_date,
-        notes: reservationForm.notes
-      })
-      
-      setMessage({ type: 'success', text: '예약이 등록되었습니다.' })
-      setShowReservationModal(false)
-      setReservationSearchQuery('')
-      setReservationAutoComplete([])
-      setShowReservationAutoComplete(false)
-      setReservationForm({
-        customer_id: '',
-        customer_name: '',
-        dog_name: '',
-        start_date: '',
-        end_date: '',
-        notes: ''
-      })
-      fetchTodayReservations()
-    } catch (error) {
-      alert(error.response?.data?.error || '예약 등록 중 오류가 발생했습니다.')
-    }
-  }
-
   // 예약 삭제
   const handleDeleteReservation = async (reservationId, dogName) => {
     if (!window.confirm(`"${dogName}"의 예약을 삭제하시겠습니까?`)) {
@@ -326,19 +228,6 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
     } catch (error) {
       alert(error.response?.data?.error || '예약 삭제 중 오류가 발생했습니다.')
     }
-  }
-
-  // 예약 폼에서 고객 선택
-  const handleSelectCustomerForReservation = (customer) => {
-    setReservationForm({
-      ...reservationForm,
-      customer_id: customer.id,
-      customer_name: customer.customer_name,
-      dog_name: customer.dog_name
-    })
-    setReservationSearchQuery('')  // 선택 후 입력 필드 초기화
-    setReservationAutoComplete([])
-    setShowReservationAutoComplete(false)
   }
 
   const handleCheckOut = async (visit) => {
@@ -757,17 +646,10 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
       {/* 호텔링 예약 목록 */}
       {visitType === 'hoteling' && (
         <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <div style={{ marginBottom: '20px' }}>
             <h2 style={{ color: '#333', margin: 0 }}>
               📅 오늘의 예약 ({todayReservations.length}건)
             </h2>
-            <button
-              className="btn btn-primary"
-              onClick={handleAddReservation}
-              style={{ padding: '10px 20px' }}
-            >
-              ➕ 예약 추가
-            </button>
           </div>
 
           {todayReservations.length === 0 ? (
@@ -1234,190 +1116,6 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
                 {isLoading ? '처리 중...' : '확인 및 체크아웃'}
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* 예약 추가 모달 */}
-      {showReservationModal && (
-        <div 
-          className="modal-overlay" 
-          onClick={(e) => {
-            // 오버레이 직접 클릭 시에만 닫기
-            if (e.target.classList.contains('modal-overlay')) {
-              setShowReservationModal(false)
-              setReservationSearchQuery('')
-              setReservationAutoComplete([])
-              setShowReservationAutoComplete(false)
-              setReservationForm({
-                customer_id: '',
-                customer_name: '',
-                dog_name: '',
-                start_date: '',
-                end_date: '',
-                notes: ''
-              })
-            }
-          }}
-        >
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ overflow: 'visible' }}>
-            <h3 style={{ marginBottom: '20px' }}>호텔링 예약 추가</h3>
-            
-            <form onSubmit={handleCreateReservation} style={{ overflow: 'visible' }}>
-              {/* 고객 검색 */}
-              <div className="form-group" style={{ overflow: 'visible', position: 'relative', zIndex: 1 }}>
-                <label>고객 검색 *</label>
-                <div style={{ position: 'relative' }} ref={reservationAutoCompleteRef}>
-                  <input
-                    type="text"
-                    placeholder="반려견 이름, 보호자명, 연락처로 검색"
-                    value={reservationSearchQuery}
-                    onChange={(e) => {
-                      console.log('입력값 변경:', e.target.value)
-                      setReservationSearchQuery(e.target.value)
-                    }}
-                    onFocus={() => {
-                      console.log('입력란 포커스, 현재 결과 수:', reservationAutoComplete.length)
-                      if (reservationAutoComplete.length > 0) {
-                        setShowReservationAutoComplete(true)
-                      }
-                    }}
-                    className="form-input"
-                    autoComplete="off"
-                    style={{ 
-                      width: '100%',
-                      position: 'relative',
-                      zIndex: 1
-                    }}
-                  />
-                  
-                  {showReservationAutoComplete && reservationAutoComplete.length > 0 && (
-                    <div 
-                      style={{
-                        position: 'absolute',
-                        top: '100%',
-                        left: 0,
-                        right: 0,
-                        background: 'white',
-                        border: '2px solid #667eea',
-                        borderRadius: '8px',
-                        marginTop: '5px',
-                        maxHeight: '300px',
-                        overflowY: 'auto',
-                        boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
-                        zIndex: 99999
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {reservationAutoComplete.map((customer) => (
-                        <div
-                          key={customer.id}
-                          onClick={() => {
-                            console.log('고객 선택:', customer)
-                            handleSelectCustomerForReservation(customer)
-                          }}
-                          style={{
-                            padding: '12px 15px',
-                            cursor: 'pointer',
-                            borderBottom: '1px solid #e0e0e0',
-                            transition: 'background 0.2s',
-                            background: 'white'
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = '#f8f9fa'
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'white'
-                          }}
-                        >
-                          <div style={{ fontWeight: '600', color: '#667eea', marginBottom: '4px' }}>
-                            🐕 {customer.dog_name}
-                          </div>
-                          <div style={{ fontSize: '0.85rem', color: '#666' }}>
-                            {customer.breed} | {customer.customer_name} | {customer.phone}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                {reservationForm.dog_name && (
-                  <div style={{
-                    marginTop: '10px',
-                    padding: '10px',
-                    background: '#e7f3ff',
-                    borderRadius: '6px',
-                    fontSize: '0.9rem',
-                    color: '#1976d2'
-                  }}>
-                    ✓ 선택됨: <strong>{reservationForm.dog_name}</strong> ({reservationForm.customer_name})
-                  </div>
-                )}
-              </div>
-
-              {/* 체크인 날짜 */}
-              <div className="form-group">
-                <label>체크인 날짜 *</label>
-                <input
-                  type="date"
-                  value={reservationForm.start_date}
-                  onChange={(e) => setReservationForm({ ...reservationForm, start_date: e.target.value })}
-                  className="form-input"
-                  required
-                />
-              </div>
-
-              {/* 체크아웃 날짜 */}
-              <div className="form-group">
-                <label>체크아웃 날짜 *</label>
-                <input
-                  type="date"
-                  value={reservationForm.end_date}
-                  onChange={(e) => setReservationForm({ ...reservationForm, end_date: e.target.value })}
-                  className="form-input"
-                  required
-                />
-              </div>
-
-              {/* 메모 */}
-              <div className="form-group">
-                <label>메모</label>
-                <textarea
-                  value={reservationForm.notes}
-                  onChange={(e) => setReservationForm({ ...reservationForm, notes: e.target.value })}
-                  className="form-input"
-                  rows="3"
-                  placeholder="특이사항이나 메모를 입력하세요"
-                />
-              </div>
-
-              <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-                <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>
-                  예약 등록
-                </button>
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => {
-                    setShowReservationModal(false)
-                    setReservationSearchQuery('')
-                    setReservationAutoComplete([])
-                    setShowReservationAutoComplete(false)
-                    setReservationForm({
-                      customer_id: '',
-                      customer_name: '',
-                      dog_name: '',
-                      start_date: '',
-                      end_date: '',
-                      notes: ''
-                    })
-                  }}
-                  style={{ flex: 1, background: '#6c757d', color: 'white' }}
-                >
-                  취소
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}
