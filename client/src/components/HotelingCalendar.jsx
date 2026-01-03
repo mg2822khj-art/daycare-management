@@ -91,16 +91,15 @@ function HotelingCalendar({ onRefresh }) {
     setReservations(filtered)
   }
 
-  // 선택한 날짜의 방문 기록 불러오기
+  // 선택한 날짜의 방문 기록 불러오기 (해당 날짜에 이용 중이었던 모든 호텔링)
   const fetchDateVisitHistory = async (date) => {
     try {
       const dateStr = formatDateToString(date)
-      const response = await axios.get(`${API_URL}/visit-history`, {
+      const response = await axios.get(`${API_URL}/hoteling-visits-on-date`, {
         params: { date: dateStr }
       })
-      // 호텔링만 필터링
-      const hotelingVisits = response.data.filter(visit => visit.visit_type === 'hoteling')
-      setDateVisitHistory(hotelingVisits)
+      console.log('선택한 날짜의 호텔링 이용 기록:', response.data)
+      setDateVisitHistory(response.data)
     } catch (error) {
       console.error('방문 기록 조회 실패:', error)
       setDateVisitHistory([])
@@ -761,7 +760,7 @@ function HotelingCalendar({ onRefresh }) {
         {dateVisitHistory.length > 0 && (
           <div>
             <h4 style={{ color: '#28a745', marginBottom: '10px', fontSize: '1rem' }}>
-              ✅ 이용 완료 내역
+              ✅ {formatDateToString(selectedDate)} 호텔링 이용 내역 ({dateVisitHistory.length}건)
             </h4>
             <div style={{ display: 'grid', gap: '10px' }}>
               {dateVisitHistory.map(visit => (
