@@ -435,7 +435,7 @@ export function calculateDuration(check_in_time) {
   }
 }
 
-// 데이케어 요금 계산 (1시간 단위, 남은 시간은 30분 기준, 15분 미만은 무시)
+// 데이케어 요금 계산 (30분 단위, 남은 시간이 15분 미만은 무시, 15분 이상은 30분 요금)
 export function calculateDaycareFee(weight, duration_minutes) {
   if (!weight || weight < 2) {
     return { fee: 0, message: '몸무게 정보가 없거나 2kg 미만입니다.' };
@@ -455,29 +455,24 @@ export function calculateDaycareFee(weight, duration_minutes) {
     pricePer30min = 3500;
   }
 
-  // 1시간 단위로 계산
-  const fullHours = Math.floor(duration_minutes / 60);
-  const remainingMinutes = duration_minutes % 60;
+  // 30분 단위로 계산
+  const full30mins = Math.floor(duration_minutes / 30); // 30분 단위 개수
+  const remainingMinutes = duration_minutes % 30; // 30분으로 나눈 나머지
   
-  let fee = fullHours * pricePerHour;
+  // 기본 요금 (30분 단위)
+  let fee = full30mins * pricePer30min;
   let additionalFee = 0;
   let additionalUnit = '';
   
-  // 남은 시간 처리 - 15분 미만은 0원, 15분 이상은 30분 단위로 올림
-  if (remainingMinutes < 15) {
-    // 15분 미만: 추가 요금 없음
-    additionalFee = 0;
-    additionalUnit = '';
-  } else {
-    // 15분 이상: 30분 단위로 올림
-    // 15~30분 -> 1개 (30분)
-    // 31~60분 -> 2개 (60분)
-    const halfHours = Math.ceil(remainingMinutes / 30);
-    additionalFee = halfHours * pricePer30min;
-    additionalUnit = `${halfHours * 30}분`;
+  // 남은 시간 처리 - 15분 미만은 0원, 15분 이상은 30분 요금 추가
+  if (remainingMinutes >= 15) {
+    additionalFee = pricePer30min;
+    additionalUnit = '30분';
+    fee += additionalFee;
   }
   
-  fee += additionalFee;
+  // 시간 표시를 위한 계산
+  const fullHours = Math.floor(duration_minutes / 60);
 
   return {
     fee,
@@ -488,7 +483,8 @@ export function calculateDaycareFee(weight, duration_minutes) {
     pricePerHour,
     pricePer30min,
     duration_minutes,
-    weight
+    weight,
+    full30mins // 30분 단위 개수 추가
   };
 }
 
@@ -520,20 +516,24 @@ export function calculateHotelingFee(weight, duration_minutes, prepaid_amount = 
   // 1일 = 1440분 (24시간)
   const minutesPerDay = 1440;
   const fullDays = Math.floor(duration_minutes / minutesPerDay);
-  const remainingMinutes = duration_minutes % minutesPerDay;
+  const excessMinutes = duration_minutes % minutesPerDay; // 1일을 초과한 시간
   
   // 기본 일수 요금
   let totalFee = fullDays * pricePerDay;
   
-  // 초과 시간 계산 - 15분 미만은 0원, 15분 이상은 30분 단위로 올림
+  // 초과 시간을 30분 단위로 계산
   let overtimeFee = 0;
-  if (remainingMinutes < 15) {
-    // 15분 미만: 추가 요금 없음
-    overtimeFee = 0;
-  } else {
-    // 15분 이상: 30분 단위로 올림
-    const halfHours = Math.ceil(remainingMinutes / 30);
-    overtimeFee = halfHours * pricePer30min;
+  if (excessMinutes > 0) {
+    const full30mins = Math.floor(excessMinutes / 30); // 30분 단위 개수
+    const remainingMinutes = excessMinutes % 30; // 30분으로 나눈 나머지
+    
+    // 30분 단위 요금
+    overtimeFee = full30mins * pricePer30min;
+    
+    // 남은 시간이 15분 이상이면 30분 요금 추가
+    if (remainingMinutes >= 15) {
+      overtimeFee += pricePer30min;
+    }
     
     // 초과 요금이 1일 호텔링 요금을 넘으면 1일 호텔링 요금으로 대체
     if (overtimeFee > pricePerDay) {
@@ -551,7 +551,7 @@ export function calculateHotelingFee(weight, duration_minutes, prepaid_amount = 
     prepaid_amount: prepaid_amount,
     remaining_fee: remainingFee,
     full_days: fullDays,
-    remaining_minutes: remainingMinutes,
+    remaining_minutes: excessMinutes,
     overtime_fee: overtimeFee,
     price_per_day: pricePerDay,
     price_per_30min: pricePer30min,
