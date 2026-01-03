@@ -463,9 +463,15 @@ export function calculateDaycareFee(weight, duration_minutes) {
   let additionalFee = 0;
   let additionalUnit = '';
   
-  // 남은 시간 처리 (15분 미만은 0원, 15분 이상은 30분 단위로 올림)
-  if (remainingMinutes >= 15) {
-    // 15분 이상이면 30분 단위로 올림 계산
+  // 남은 시간 처리 - 15분 미만은 0원, 15분 이상은 30분 단위로 올림
+  if (remainingMinutes < 15) {
+    // 15분 미만: 추가 요금 없음
+    additionalFee = 0;
+    additionalUnit = '';
+  } else {
+    // 15분 이상: 30분 단위로 올림
+    // 15~30분 -> 1개 (30분)
+    // 31~60분 -> 2개 (60분)
     const halfHours = Math.ceil(remainingMinutes / 30);
     additionalFee = halfHours * pricePer30min;
     additionalUnit = `${halfHours * 30}분`;
@@ -519,10 +525,13 @@ export function calculateHotelingFee(weight, duration_minutes, prepaid_amount = 
   // 기본 일수 요금
   let totalFee = fullDays * pricePerDay;
   
-  // 초과 시간 계산 (15분 미만은 0원, 15분 이상은 30분 단위로 올림)
+  // 초과 시간 계산 - 15분 미만은 0원, 15분 이상은 30분 단위로 올림
   let overtimeFee = 0;
-  if (remainingMinutes >= 15) {
-    // 15분 이상이면 30분 단위로 올림
+  if (remainingMinutes < 15) {
+    // 15분 미만: 추가 요금 없음
+    overtimeFee = 0;
+  } else {
+    // 15분 이상: 30분 단위로 올림
     const halfHours = Math.ceil(remainingMinutes / 30);
     overtimeFee = halfHours * pricePer30min;
     
