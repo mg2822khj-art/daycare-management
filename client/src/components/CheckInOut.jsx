@@ -128,22 +128,23 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
     return () => clearTimeout(timeoutId)
   }, [reservationSearchQuery])
 
-  // 외부 클릭 감지 (모달 제외)
+  // 외부 클릭 감지 (자동완성 닫기)
   useEffect(() => {
     const handleClickOutside = (event) => {
-      // 모달이 열려있으면 외부 클릭 감지 안 함
-      if (showReservationModal || showCheckInModal) {
-        return
-      }
-      
+      // 일반 체크인 자동완성 닫기
       if (autoCompleteRef.current && !autoCompleteRef.current.contains(event.target)) {
         setShowAutoComplete(false)
+      }
+      
+      // 예약 모달 자동완성 닫기 (모달이 열려있을 때만)
+      if (showReservationModal && reservationAutoCompleteRef.current && !reservationAutoCompleteRef.current.contains(event.target)) {
+        setShowReservationAutoComplete(false)
       }
     }
 
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [showReservationModal, showCheckInModal])
+  }, [showReservationModal])
 
   const handleSearch = async (e) => {
     e.preventDefault()
@@ -269,10 +270,10 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
       end_date: today,
       notes: ''
     })
-    setDogName('')
-    setSearchResults([])
-    setAutoCompleteResults([])
-    setShowAutoComplete(false)
+    // 예약 모달 전용 자동완성 초기화
+    setReservationSearchQuery('')
+    setReservationAutoComplete([])
+    setShowReservationAutoComplete(false)
     setShowReservationModal(true)
   }
 
@@ -1259,47 +1260,62 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh }) {
             }
           }}
         >
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ overflow: 'visible' }}>
             <h3 style={{ marginBottom: '20px' }}>호텔링 예약 추가</h3>
             
-            <form onSubmit={handleCreateReservation}>
+            <form onSubmit={handleCreateReservation} style={{ overflow: 'visible' }}>
               {/* 고객 검색 */}
-              <div className="form-group">
+              <div className="form-group" style={{ overflow: 'visible', position: 'relative', zIndex: 1 }}>
                 <label>고객 검색 *</label>
                 <div style={{ position: 'relative' }} ref={reservationAutoCompleteRef}>
                   <input
                     type="text"
                     placeholder="반려견 이름, 보호자명, 연락처로 검색"
                     value={reservationSearchQuery}
-                    onChange={(e) => setReservationSearchQuery(e.target.value)}
+                    onChange={(e) => {
+                      console.log('입력값 변경:', e.target.value)
+                      setReservationSearchQuery(e.target.value)
+                    }}
                     onFocus={() => {
+                      console.log('입력란 포커스, 현재 결과 수:', reservationAutoComplete.length)
                       if (reservationAutoComplete.length > 0) {
                         setShowReservationAutoComplete(true)
                       }
                     }}
                     className="form-input"
                     autoComplete="off"
+                    style={{ 
+                      width: '100%',
+                      position: 'relative',
+                      zIndex: 1
+                    }}
                   />
                   
                   {showReservationAutoComplete && reservationAutoComplete.length > 0 && (
-                    <div style={{
-                      position: 'absolute',
-                      top: '100%',
-                      left: 0,
-                      right: 0,
-                      background: 'white',
-                      border: '2px solid #667eea',
-                      borderRadius: '8px',
-                      marginTop: '5px',
-                      maxHeight: '300px',
-                      overflowY: 'auto',
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                      zIndex: 10000
-                    }}>
+                    <div 
+                      style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        right: 0,
+                        background: 'white',
+                        border: '2px solid #667eea',
+                        borderRadius: '8px',
+                        marginTop: '5px',
+                        maxHeight: '300px',
+                        overflowY: 'auto',
+                        boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+                        zIndex: 99999
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       {reservationAutoComplete.map((customer) => (
                         <div
                           key={customer.id}
-                          onClick={() => handleSelectCustomerForReservation(customer)}
+                          onClick={() => {
+                            console.log('고객 선택:', customer)
+                            handleSelectCustomerForReservation(customer)
+                          }}
                           style={{
                             padding: '12px 15px',
                             cursor: 'pointer',
