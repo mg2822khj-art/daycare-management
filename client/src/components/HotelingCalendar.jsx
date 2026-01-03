@@ -39,15 +39,20 @@ function HotelingCalendar({ onRefresh }) {
 
   // 현재 월의 예약 불러오기
   useEffect(() => {
-    fetchMonthReservations(selectedDate)
-    fetchCurrentVisits()
+    const loadData = async () => {
+      await fetchMonthReservations(selectedDate)
+      await fetchCurrentVisits()
+    }
+    loadData()
   }, [selectedDate])
 
   // 선택한 날짜의 예약 및 방문 기록 불러오기
   useEffect(() => {
-    fetchDateReservations(selectedDate)
+    if (currentMonthReservations.length >= 0) {
+      fetchDateReservations(selectedDate)
+    }
     fetchDateVisitHistory(selectedDate)
-  }, [selectedDate, currentMonthReservations])
+  }, [selectedDate, currentMonthReservations.length])
 
   // 날짜를 YYYY-MM-DD 형식으로 변환 (로컬 시간대 기준)
   const formatDateToString = (date) => {
