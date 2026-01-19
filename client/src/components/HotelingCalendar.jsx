@@ -11,6 +11,8 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
   const [currentMonthReservations, setCurrentMonthReservations] = useState([])
   const [currentVisits, setCurrentVisits] = useState([])
   const [dateVisitHistory, setDateVisitHistory] = useState([])
+  // 예약용 고객 전체 목록 (한 번만 불러와서 클라이언트에서 검색)
+  const [allCustomers, setAllCustomers] = useState([])
   const [showAddModal, setShowAddModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [selectedReservation, setSelectedReservation] = useState(null)
@@ -72,6 +74,28 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
     const day = String(date.getDate()).padStart(2, '0')
     return `${year}-${month}-${day}`
   }
+
+  // 호텔링 예약용 고객 전체 목록 불러오기 (한 번만)
+  useEffect(() => {
+    const loadCustomers = async () => {
+      try {
+        console.log('📋 호텔링 예약용 고객 목록 불러오기...')
+        const response = await axios.get(`${API_URL}/customers`)
+        if (Array.isArray(response.data)) {
+          // 여러 스키마 형태를 모두 지원하기 위해 그대로 저장
+          setAllCustomers(response.data)
+          console.log('📋 고객 수:', response.data.length)
+        } else {
+          console.error('고객 목록 응답이 배열이 아닙니다:', response.data)
+          setAllCustomers([])
+        }
+      } catch (error) {
+        console.error('고객 목록 불러오기 실패:', error)
+        setAllCustomers([])
+      }
+    }
+    loadCustomers()
+  }, [])
 
   // 현재 체크인 목록 불러오기
   const fetchCurrentVisits = async () => {
@@ -143,7 +167,7 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
     }
   }
 
-  // 고객 검색
+  // 고객 검색 (백엔드 검색 API 대신, 미리 불러온 allCustomers에서 필터)
   const handleSearch = async (term) => {
     setSearchTerm(term)
     if (!term || term.trim().length === 0) {
@@ -153,30 +177,57 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
     }
 
     setIsSearching(true)
+
     try {
-      console.log('🔍 검색 요청:', term.trim())
-      const response = await axios.get(`${API_URL}/customers/search/${term.trim()}`)
-      console.log('🔍 검색 결과:', response.data)
-      
-      // 배열인지 확인
-      if (Array.isArray(response.data)) {
-        // 각 결과에 customer_id가 있는지 확인
-        const results = response.data.map(item => {
-          const customerId = item.customer_id || item.customerId
-          if (!customerId) {
-            console.warn('⚠️ customer_id 없는 검색 결과:', item)
-          }
-          return item
-        })
-        setSearchResults(results)
-        setIsSearching(false)
-      } else {
-        console.error('API 응답이 배열이 아닙니다:', response.data)
-        setSearchResults([])
-        setIsSearching(false)
-      }
+      const keyword = term.trim().toLowerCase()
+      // 다양한 구조를 지원: 단일 고객+강아지 / 고객+dogs 배열 등
+      const results = []
+
+      allCustomers.forEach((c) => {
+        // 형태 1: 고객 한 명 + 단일 강아지 필드(dog_name, breed)
+        const baseMatch =
+          (c.customer_name && c.customer_name.toLowerCase().includes(keyword)) ||
+          (c.phone && c.phone.toLowerCase().includes(keyword)) ||
+          (c.dog_name && c.dog_name.toLowerCase().includes(keyword)) ||
+          (c.breed && c.breed.toLowerCase().includes(keyword))
+
+        // 형태 2: 고객 + dogs 배열
+        if (Array.isArray(c.dogs) && c.dogs.length > 0) {
+          c.dogs.forEach((dog) => {
+            const dogMatch =
+              (dog.dog_name && dog.dog_name.toLowerCase().includes(keyword)) ||
+              (dog.breed && dog.breed.toLowerCase().includes(keyword))
+
+            if (baseMatch || dogMatch) {
+              results.push({
+                // 검색 결과에 필요한 공통 필드로 변환
+                id: dog.id || dog.dog_id || dog.id,
+                customer_id: c.id || c.customer_id,
+                customer_name: c.customer_name,
+                phone: c.phone,
+                dog_name: dog.dog_name,
+                breed: dog.breed,
+              })
+            }
+          })
+        } else if (baseMatch) {
+          // 단일 강아지 구조
+          results.push({
+            id: c.id,
+            customer_id: c.id,
+            customer_name: c.customer_name,
+            phone: c.phone,
+            dog_name: c.dog_name || '(이름 없음)',
+            breed: c.breed || '',
+          })
+        }
+      })
+
+      console.log('🔍 로컬 필터링 검색 결과:', results)
+      setSearchResults(results)
+      setIsSearching(false)
     } catch (error) {
-      console.error('검색 실패:', error)
+      console.error('검색 필터링 실패:', error)
       setSearchResults([])
       setIsSearching(false)
     }
