@@ -172,7 +172,9 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
   const handleSelectCustomer = (customer) => {
     setFormData({
       ...formData,
-      customer_id: customer.id,
+      // 검색 결과는 dog 레코드(d.id)와 보호자 ID(c.id as customer_id)를 같이 담고 있음
+      // 예약 생성 시에는 보호자 ID가 필요하므로 customer.customer_id를 사용해야 함
+      customer_id: customer.customer_id,
       customer_name: customer.customer_name,
       dog_name: customer.dog_name
     })
