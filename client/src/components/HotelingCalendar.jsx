@@ -154,30 +154,60 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
 
     setIsSearching(true)
     try {
+      console.log('🔍 검색 요청:', term.trim())
       const response = await axios.get(`${API_URL}/customers/search/${term.trim()}`)
+      console.log('🔍 검색 결과:', response.data)
+      
       // 배열인지 확인
       if (Array.isArray(response.data)) {
-        setSearchResults(response.data)
+        // 각 결과에 customer_id가 있는지 확인
+        const results = response.data.map(item => {
+          const customerId = item.customer_id || item.customerId
+          if (!customerId) {
+            console.warn('⚠️ customer_id 없는 검색 결과:', item)
+          }
+          return item
+        })
+        setSearchResults(results)
+        setIsSearching(false)
       } else {
         console.error('API 응답이 배열이 아닙니다:', response.data)
         setSearchResults([])
+        setIsSearching(false)
       }
     } catch (error) {
       console.error('검색 실패:', error)
       setSearchResults([])
+      setIsSearching(false)
     }
   }
 
   // 고객 선택
   const handleSelectCustomer = (customer) => {
+    console.log('🔍 고객 선택:', customer)
+    
+    // customer_id 확인 및 설정
+    const customerId = customer.customer_id || customer.customerId || customer.id
+    
+    if (!customerId) {
+      console.error('❌ customer_id를 찾을 수 없습니다:', customer)
+      alert('고객 정보에 오류가 있습니다. 다시 검색해주세요.')
+      return
+    }
+    
     setFormData({
       ...formData,
-      // 검색 결과는 dog 레코드(d.id)와 보호자 ID(c.id as customer_id)를 같이 담고 있음
-      // 예약 생성 시에는 보호자 ID가 필요하므로 customer.customer_id를 사용해야 함
-      customer_id: customer.customer_id,
+      customer_id: customerId,
+      customer_name: customer.customer_name || '',
+      dog_name: customer.dog_name || ''
+    })
+    
+    console.log('✅ formData 업데이트:', {
+      customer_id: customerId,
       customer_name: customer.customer_name,
       dog_name: customer.dog_name
     })
+    
     setSearchTerm(`${customer.dog_name} (${customer.customer_name})`)
     setSearchResults([])
     setIsSearching(false)
@@ -218,41 +248,53 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
   const handleCreateReservation = async (e) => {
     e.preventDefault()
     
-    // 1차: 폼에 저장된 customer_id 사용
+    console.log('📝 예약 생성 시도:', formData)
+    
+    // customer_id 확인
     let customerId = formData.customer_id
-
-    // 2차: 폼에 ID가 없고 검색 결과가 남아있으면, 검색 결과에서 자동으로 ID 추출
+    
+    // customer_id가 없으면 검색 결과에서 찾기
     if (!customerId && searchResults && searchResults.length > 0) {
-      // 검색 결과 중에서 현재 검색어와 가장 잘 맞는 항목을 찾음
       const matched = searchResults.find(item => {
         const label = `${item.dog_name} (${item.customer_name})`
         return label === searchTerm
       }) || searchResults[0]
-
+      
       if (matched) {
-        customerId = matched.customer_id || matched.customerId || matched.id
-        console.log('✅ 검색 결과에서 자동으로 고객 ID 선택:', customerId, matched)
+        customerId = matched.customer_id || matched.customerId
+        console.log('✅ 검색 결과에서 customer_id 추출:', customerId, matched)
       }
     }
-
+    
+    // 최종 확인
     if (!customerId) {
-      alert('고객을 선택해주세요. 검색 결과에서 고객을 클릭해서 선택해야 합니다.')
+      console.error('❌ customer_id 없음:', { formData, searchResults, searchTerm })
+      alert('고객을 선택해주세요.\n검색 결과 목록에서 고객을 클릭해서 선택해야 합니다.')
       return
     }
+    
+    console.log('✅ 예약 생성 요청:', {
+      customer_id: customerId,
+      start_date: formData.start_date,
+      end_date: formData.end_date,
+      notes: formData.notes
+    })
 
     try {
-      await axios.post(`${API_URL}/reservations`, {
+      const response = await axios.post(`${API_URL}/reservations`, {
         customer_id: customerId,
         start_date: formData.start_date,
         end_date: formData.end_date,
         notes: formData.notes
       })
       
+      console.log('✅ 예약 생성 성공:', response.data)
       alert('예약이 등록되었습니다.')
       setShowAddModal(false)
       fetchMonthReservations(selectedDate)
       onRefresh() // 호텔링 카테고리에도 반영
     } catch (error) {
+      console.error('❌ 예약 생성 오류:', error)
       alert(error.response?.data?.error || '예약 등록 중 오류가 발생했습니다.')
     }
   }
@@ -932,19 +974,48 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
                   className="form-input"
                 />
                 
-                {isSearching && Array.isArray(searchResults) && searchResults.length > 0 && (
-                  <div className="search-results">
-                    {searchResults.map(customer => (
-                      <div
-                        key={customer.id}
-                        className="search-result-item"
-                        onClick={() => handleSelectCustomer(customer)}
-                      >
-                        <strong>{customer.dog_name}</strong> ({customer.breed})
-                        <br />
-                        <small>{customer.customer_name} - {customer.phone}</small>
-                      </div>
-                    ))}
+                {Array.isArray(searchResults) && searchResults.length > 0 && (
+                  <div className="search-results" style={{
+                    maxHeight: '200px',
+                    overflowY: 'auto',
+                    border: '1px solid #ddd',
+                    borderRadius: '8px',
+                    marginTop: '8px',
+                    background: 'white'
+                  }}>
+                    {searchResults.map((customer, index) => {
+                      const customerId = customer.customer_id || customer.customerId || customer.id
+                      return (
+                        <div
+                          key={customer.id || index}
+                          className="search-result-item"
+                          onClick={() => {
+                            console.log('🖱️ 검색 결과 클릭:', customer)
+                            handleSelectCustomer(customer)
+                          }}
+                          style={{
+                            padding: '12px',
+                            cursor: 'pointer',
+                            borderBottom: index < searchResults.length - 1 ? '1px solid #eee' : 'none',
+                            transition: 'background-color 0.2s'
+                          }}
+                          onMouseEnter={(e) => e.target.style.backgroundColor = '#f0f0f0'}
+                          onMouseLeave={(e) => e.target.style.backgroundColor = 'white'}
+                        >
+                          <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
+                            🐕 {customer.dog_name} ({customer.breed || '견종 없음'})
+                          </div>
+                          <div style={{ fontSize: '0.9rem', color: '#666' }}>
+                            👤 {customer.customer_name} - 📞 {customer.phone}
+                          </div>
+                          {customerId && (
+                            <div style={{ fontSize: '0.75rem', color: '#999', marginTop: '4px' }}>
+                              ID: {customerId}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
               </div>

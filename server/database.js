@@ -243,27 +243,33 @@ export function findCustomersByDogName(dog_name) {
 }
 
 // 반려견 이름, 보호자 이름, 연락처로 실시간 검색 (부분 일치, 삭제되지 않은 것만, 나이 자동 계산)
+// 반려견 이름, 보호자 이름, 연락처로 실시간 검색 (부분 일치, 삭제되지 않은 것만, 나이 자동 계산)
 export function searchCustomersByDogName(searchTerm) {
   if (!searchTerm) return [];
-  const stmt = db.prepare('SELECT * FROM customers WHERE (dog_name LIKE ? OR customer_name LIKE ? OR phone LIKE ?) AND deleted_at IS NULL ORDER BY dog_name LIMIT 20');
+  const stmt = db.prepare(`
+    SELECT d.*, c.customer_name, c.phone, c.id as customer_id
+    FROM dogs d
+    JOIN customers c ON d.customer_id = c.id
+    WHERE (d.dog_name LIKE ? OR c.customer_name LIKE ? OR c.phone LIKE ?) 
+    AND d.deleted_at IS NULL 
+    AND c.deleted_at IS NULL 
+    ORDER BY d.dog_name 
+    LIMIT 20
+  `);
   const searchPattern = `%${searchTerm}%`;
   stmt.bind([searchPattern, searchPattern, searchPattern]);
   const results = [];
   while (stmt.step()) {
-    const customer = stmt.getAsObject();
-    if (customer.birth_date) {
-      const age = calculateAge(customer.birth_date);
-      customer.age_years = age.years;
-      customer.age_months = age.months;
-    } else if (customer.age !== undefined && customer.age !== null) {
-      // 기존 데이터 호환성
-      customer.age_years = parseInt(customer.age) || 0;
-      customer.age_months = 0;
+    const dog = stmt.getAsObject();
+    if (dog.birth_date) {
+      const age = calculateAge(dog.birth_date);
+      dog.age_years = age.years;
+      dog.age_months = age.months;
     } else {
-      customer.age_years = 0;
-      customer.age_months = 0;
+      dog.age_years = 0;
+      dog.age_months = 0;
     }
-    results.push(customer);
+    results.push(dog);
   }
   stmt.free();
   return results;
