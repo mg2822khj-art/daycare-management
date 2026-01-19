@@ -522,8 +522,12 @@ app.post('/api/reservations', (req, res) => {
       message: '예약이 등록되었습니다.'
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: '예약 등록 중 오류가 발생했습니다.' });
+    console.error('예약 생성 오류:', error);
+    res.status(500).json({ 
+      error: error.message || '예약 등록 중 오류가 발생했습니다.',
+      // 개발 환경에서는 상세 스택도 같이 전달
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 
