@@ -218,14 +218,31 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
   const handleCreateReservation = async (e) => {
     e.preventDefault()
     
-    if (!formData.customer_id) {
-      alert('고객을 선택해주세요.')
+    // 1차: 폼에 저장된 customer_id 사용
+    let customerId = formData.customer_id
+
+    // 2차: 폼에 ID가 없고 검색 결과가 남아있으면, 검색 결과에서 자동으로 ID 추출
+    if (!customerId && searchResults && searchResults.length > 0) {
+      // 검색 결과 중에서 현재 검색어와 가장 잘 맞는 항목을 찾음
+      const matched = searchResults.find(item => {
+        const label = `${item.dog_name} (${item.customer_name})`
+        return label === searchTerm
+      }) || searchResults[0]
+
+      if (matched) {
+        customerId = matched.customer_id || matched.customerId || matched.id
+        console.log('✅ 검색 결과에서 자동으로 고객 ID 선택:', customerId, matched)
+      }
+    }
+
+    if (!customerId) {
+      alert('고객을 선택해주세요. 검색 결과에서 고객을 클릭해서 선택해야 합니다.')
       return
     }
 
     try {
       await axios.post(`${API_URL}/reservations`, {
-        customer_id: formData.customer_id,
+        customer_id: customerId,
         start_date: formData.start_date,
         end_date: formData.end_date,
         notes: formData.notes
