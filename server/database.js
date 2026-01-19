@@ -158,6 +158,24 @@ db.run(`
   CREATE INDEX IF NOT EXISTS idx_reservations_dates ON hoteling_reservations(start_date, end_date);
   CREATE INDEX IF NOT EXISTS idx_reservations_deleted ON hoteling_reservations(deleted_at);
 `);
+
+// 기존 DB 호환성: hoteling_reservations 테이블에 customer_id 컬럼이 없으면 추가
+try {
+  const pragmaResult = db.exec(`PRAGMA table_info(hoteling_reservations);`);
+  if (pragmaResult && pragmaResult.length > 0) {
+    const columns = pragmaResult[0].columns; // ['cid','name','type','notnull','dflt_value','pk']
+    const nameIndex = columns.indexOf('name');
+    const hasCustomerId = pragmaResult[0].values.some(row => row[nameIndex] === 'customer_id');
+    if (!hasCustomerId) {
+      console.log('⚠️ hoteling_reservations 테이블에 customer_id 컬럼이 없습니다. 추가합니다...');
+      db.run(`ALTER TABLE hoteling_reservations ADD COLUMN customer_id INTEGER;`);
+      console.log('✅ customer_id 컬럼 추가 완료');
+    }
+  }
+} catch (e) {
+  console.error('hoteling_reservations 스키마 확인/수정 중 오류:', e);
+}
+
 saveDatabase();
 console.log('✅ 데이터베이스 초기화 완료');
 
