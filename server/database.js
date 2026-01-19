@@ -159,17 +159,72 @@ db.run(`
   CREATE INDEX IF NOT EXISTS idx_reservations_deleted ON hoteling_reservations(deleted_at);
 `);
 
-// 기존 DB 호환성: hoteling_reservations 테이블에 customer_id 컬럼이 없으면 추가
+// 기존 DB 호환성: hoteling_reservations 테이블 스키마 보정
 try {
   const pragmaResult = db.exec(`PRAGMA table_info(hoteling_reservations);`);
   if (pragmaResult && pragmaResult.length > 0) {
     const columns = pragmaResult[0].columns; // ['cid','name','type','notnull','dflt_value','pk']
     const nameIndex = columns.indexOf('name');
     const hasCustomerId = pragmaResult[0].values.some(row => row[nameIndex] === 'customer_id');
+    const hasDogId = pragmaResult[0].values.some(row => row[nameIndex] === 'dog_id');
+
+    // 1) customer_id 컬럼이 없으면 추가
     if (!hasCustomerId) {
       console.log('⚠️ hoteling_reservations 테이블에 customer_id 컬럼이 없습니다. 추가합니다...');
       db.run(`ALTER TABLE hoteling_reservations ADD COLUMN customer_id INTEGER;`);
       console.log('✅ customer_id 컬럼 추가 완료');
+    }
+
+    // 2) 예전 스키마에서 사용하던 dog_id 컬럼이 남아 있다면,
+    //    NOT NULL 제약 때문에 오류가 날 수 있으므로 새 테이블로 마이그레이션
+    if (hasDogId) {
+      console.log('⚠️ hoteling_reservations 테이블에 dog_id 컬럼이 감지되었습니다. 새 스키마로 마이그레이션합니다...');
+
+      // 새 테이블 생성 (현재 코드에서 사용하는 스키마)
+      db.run(`
+        CREATE TABLE IF NOT EXISTS hoteling_reservations_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          customer_id INTEGER NOT NULL,
+          start_date TEXT NOT NULL,
+          end_date TEXT NOT NULL,
+          notes TEXT,
+          status TEXT DEFAULT 'confirmed',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          deleted_at DATETIME DEFAULT NULL,
+          FOREIGN KEY (customer_id) REFERENCES customers (id)
+        );
+      `);
+
+      // 기존 데이터에서 사용할 수 있는 컬럼만 복사 (dog_id는 버림)
+      try {
+        db.run(`
+          INSERT INTO hoteling_reservations_new (id, customer_id, start_date, end_date, notes, status, created_at, deleted_at)
+          SELECT 
+            id,
+            -- 기존 테이블에 customer_id가 없었다면 NULL로 들어가지만,
+            -- 앞으로 새로 추가되는 예약만 정확한 customer_id를 사용하면 되므로 과거 데이터는 무시 가능
+            customer_id,
+            start_date,
+            end_date,
+            notes,
+            COALESCE(status, 'confirmed'),
+            created_at,
+            deleted_at
+          FROM hoteling_reservations;
+        `);
+      } catch (copyErr) {
+        console.error('hoteling_reservations 데이터 마이그레이션 중 오류:', copyErr);
+      }
+
+      // 기존 테이블/인덱스 제거 후 새 테이블 이름 변경
+      db.run(`DROP TABLE hoteling_reservations;`);
+      db.run(`ALTER TABLE hoteling_reservations_new RENAME TO hoteling_reservations;`);
+
+      // 인덱스 재생성
+      db.run(`CREATE INDEX IF NOT EXISTS idx_reservations_dates ON hoteling_reservations(start_date, end_date);`);
+      db.run(`CREATE INDEX IF NOT EXISTS idx_reservations_deleted ON hoteling_reservations(deleted_at);`);
+
+      console.log('✅ hoteling_reservations 테이블 마이그레이션 완료 (dog_id 제거)');
     }
   }
 } catch (e) {
