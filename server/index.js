@@ -101,13 +101,16 @@ app.get('/api/customers/:customerId', (req, res) => {
 app.get('/api/customers/search/:searchTerm', (req, res) => {
   try {
     const searchTerm = req.params.searchTerm;
+    console.log('📋 검색 요청 (search):', searchTerm);
     if (!searchTerm || searchTerm.trim().length === 0) {
+      console.log('⚠️ 검색어가 비어있습니다.');
       return res.json([]);
     }
     const customers = searchCustomersByDogName(searchTerm.trim());
+    console.log(`📋 검색 결과 반환: ${customers.length}건`);
     res.json(customers);
   } catch (error) {
-    console.error(error);
+    console.error('❌ 검색 API 오류:', error);
     res.status(500).json({ error: '고객 검색 중 오류가 발생했습니다.' });
   }
 });
@@ -116,13 +119,16 @@ app.get('/api/customers/search/:searchTerm', (req, res) => {
 app.get('/api/customers/autocomplete', (req, res) => {
   try {
     const { q } = req.query;
+    console.log('🔍 자동완성 검색 요청:', q);
     if (!q || q.trim().length === 0) {
+      console.log('⚠️ 자동완성 검색어가 비어있습니다.');
       return res.json([]);
     }
     const customers = searchCustomersByDogName(q.trim());
+    console.log(`🔍 자동완성 검색 결과 반환: ${customers.length}건`);
     res.json(customers);
   } catch (error) {
-    console.error(error);
+    console.error('❌ 자동완성 검색 API 오류:', error);
     res.status(500).json({ error: '검색 중 오류가 발생했습니다.' });
   }
 });

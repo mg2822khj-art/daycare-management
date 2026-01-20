@@ -24,16 +24,23 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
   const [todayReservations, setTodayReservations] = useState([])
   const [showCheckInModal, setShowCheckInModal] = useState(false)
   const [selectedReservation, setSelectedReservation] = useState(null)
+  const [allCustomers, setAllCustomers] = useState([]) // 모든 고객 데이터 저장
   const autoCompleteRef = useRef(null)
 
   // 현재 타입의 방문만 필터링
   const filteredVisits = currentVisits.filter(visit => visit.visit_type === visitType)
+
+  // 컴포넌트 마운트 시 모든 고객 데이터 가져오기
+  useEffect(() => {
+    fetchAllCustomers()
+  }, [])
 
   // refreshTrigger가 변경되면 데이터 새로고침
   useEffect(() => {
     if (refreshTrigger > 0 && visitType === 'hoteling') {
       console.log('🔄 호텔링: refreshTrigger 감지, 예약 목록 새로고침', refreshTrigger)
       fetchTodayReservations()
+      fetchAllCustomers() // 고객 목록도 새로고침
     }
   }, [refreshTrigger, visitType])
 
@@ -43,6 +50,44 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
       fetchTodayReservations()
     }
   }, [visitType])
+
+  // 모든 고객 데이터 가져오기
+  const fetchAllCustomers = async () => {
+    try {
+      console.log('📋 모든 고객 데이터 가져오기 시작...')
+      const response = await axios.get(`${API_URL}/customers`)
+      console.log('✅ 고객 데이터 로드 완료:', response.data?.length || 0, '건')
+      
+      // 고객별로 강아지 정보를 포함한 평탄화된 배열 생성
+      const flattenedCustomers = []
+      if (response.data && Array.isArray(response.data)) {
+        response.data.forEach(customer => {
+          if (customer.dogs && Array.isArray(customer.dogs)) {
+            customer.dogs.forEach(dog => {
+              flattenedCustomers.push({
+                id: dog.id,
+                dog_id: dog.id,
+                customer_id: customer.id,
+                dog_name: dog.dog_name,
+                customer_name: customer.customer_name,
+                phone: customer.phone,
+                breed: dog.breed,
+                age_years: dog.age_years || 0,
+                age_months: dog.age_months || 0,
+                weight: dog.weight,
+                birth_date: dog.birth_date
+              })
+            })
+          }
+        })
+      }
+      console.log('📊 평탄화된 고객 데이터:', flattenedCustomers.length, '건')
+      setAllCustomers(flattenedCustomers)
+    } catch (error) {
+      console.error('❌ 고객 데이터 가져오기 실패:', error)
+      setAllCustomers([])
+    }
+  }
 
   const fetchTodayReservations = async () => {
     try {
@@ -63,39 +108,41 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
     )
   }
 
-  // 실시간 자동완성 검색 (즉시 반응)
+  // 실시간 자동완성 검색 (클라이언트 사이드 필터링)
   useEffect(() => {
-    const searchAutoComplete = async () => {
-      if (dogName.trim().length === 0) {
-        setAutoCompleteResults([])
-        setShowAutoComplete(false)
-        return
-      }
-
-      // 최소 1글자 이상 입력 시 즉시 검색
-      if (dogName.trim().length < 1) {
-        setAutoCompleteResults([])
-        setShowAutoComplete(false)
-        return
-      }
-
-      try {
-        console.log('자동완성 검색 시작:', dogName.trim())
-        const response = await axios.get(`${API_URL}/customers/autocomplete?q=${encodeURIComponent(dogName.trim())}`)
-        console.log('자동완성 검색 결과:', response.data)
-        setAutoCompleteResults(response.data)
-        setShowAutoComplete(response.data.length > 0)
-      } catch (error) {
-        console.error('자동완성 검색 실패:', error)
-        setAutoCompleteResults([])
-        setShowAutoComplete(false)
-      }
+    if (dogName.trim().length === 0) {
+      setAutoCompleteResults([])
+      setShowAutoComplete(false)
+      return
     }
 
-    // 딜레이를 더 줄여서 빠르게 반응 (100ms)
-    const timeoutId = setTimeout(searchAutoComplete, 100)
-    return () => clearTimeout(timeoutId)
-  }, [dogName])
+    // 최소 1글자 이상 입력 시 즉시 검색
+    if (dogName.trim().length < 1) {
+      setAutoCompleteResults([])
+      setShowAutoComplete(false)
+      return
+    }
+
+    console.log('🔍 자동완성 검색 시작 (클라이언트):', dogName.trim())
+    console.log('📊 전체 고객 데이터:', allCustomers.length, '건')
+    
+    // 클라이언트 사이드 필터링
+    const searchTerm = dogName.trim().toLowerCase()
+    const filtered = allCustomers.filter(customer => {
+      const dogNameMatch = customer.dog_name?.toLowerCase().includes(searchTerm)
+      const customerNameMatch = customer.customer_name?.toLowerCase().includes(searchTerm)
+      const phoneMatch = customer.phone?.includes(searchTerm)
+      return dogNameMatch || customerNameMatch || phoneMatch
+    }).slice(0, 20) // 최대 20개만 표시
+
+    console.log('✅ 자동완성 검색 결과:', filtered.length, '건')
+    setAutoCompleteResults(filtered)
+    setShowAutoComplete(filtered.length > 0)
+    
+    if (filtered.length === 0) {
+      console.log('⚠️ 검색 결과가 없습니다.')
+    }
+  }, [dogName, allCustomers])
 
   // 외부 클릭 감지 (자동완성 닫기)
   useEffect(() => {
@@ -110,7 +157,7 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const handleSearch = async (e) => {
+  const handleSearch = (e) => {
     e.preventDefault()
     if (!dogName.trim()) return
 
@@ -118,20 +165,32 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
     setMessage({ type: '', text: '' })
     setShowAutoComplete(false)
 
-    try {
-      const response = await axios.get(`${API_URL}/customers/search/${dogName.trim()}`)
-      setSearchResults(response.data)
-      setShowResults(true)
-    } catch (error) {
+    console.log('📋 검색 요청 (클라이언트):', dogName.trim())
+    console.log('📊 전체 고객 데이터:', allCustomers.length, '건')
+    
+    // 클라이언트 사이드 필터링
+    const searchTerm = dogName.trim().toLowerCase()
+    const filtered = allCustomers.filter(customer => {
+      const dogNameMatch = customer.dog_name?.toLowerCase().includes(searchTerm)
+      const customerNameMatch = customer.customer_name?.toLowerCase().includes(searchTerm)
+      const phoneMatch = customer.phone?.includes(searchTerm)
+      return dogNameMatch || customerNameMatch || phoneMatch
+    })
+
+    console.log('✅ 검색 결과:', filtered.length, '건')
+    setSearchResults(filtered)
+    setShowResults(filtered.length > 0)
+    
+    if (filtered.length === 0) {
       setMessage({
-        type: 'error',
-        text: error.response?.data?.error || '검색 중 오류가 발생했습니다.'
+        type: 'warning',
+        text: '검색 결과가 없습니다.'
       })
-      setSearchResults([])
-      setShowResults(false)
-    } finally {
-      setIsLoading(false)
+    } else {
+      setMessage({ type: '', text: '' })
     }
+    
+    setIsLoading(false)
   }
 
   const handleAutoCompleteSelect = (customer) => {

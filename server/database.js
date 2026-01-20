@@ -318,34 +318,46 @@ export function findCustomersByDogName(dog_name) {
 // 반려견 이름, 보호자 이름, 연락처로 실시간 검색 (부분 일치, 삭제되지 않은 것만, 나이 자동 계산)
 // 반려견 이름, 보호자 이름, 연락처로 실시간 검색 (부분 일치, 삭제되지 않은 것만, 나이 자동 계산)
 export function searchCustomersByDogName(searchTerm) {
-  if (!searchTerm) return [];
-  const stmt = db.prepare(`
-    SELECT d.*, c.customer_name, c.phone, c.id as customer_id
-    FROM dogs d
-    JOIN customers c ON d.customer_id = c.id
-    WHERE (d.dog_name LIKE ? OR c.customer_name LIKE ? OR c.phone LIKE ?) 
-    AND d.deleted_at IS NULL 
-    AND c.deleted_at IS NULL 
-    ORDER BY d.dog_name 
-    LIMIT 20
-  `);
-  const searchPattern = `%${searchTerm}%`;
-  stmt.bind([searchPattern, searchPattern, searchPattern]);
-  const results = [];
-  while (stmt.step()) {
-    const dog = stmt.getAsObject();
-    if (dog.birth_date) {
-      const age = calculateAge(dog.birth_date);
-      dog.age_years = age.years;
-      dog.age_months = age.months;
-    } else {
-      dog.age_years = 0;
-      dog.age_months = 0;
-    }
-    results.push(dog);
+  if (!searchTerm) {
+    console.log('🔍 검색어가 없습니다.');
+    return [];
   }
-  stmt.free();
-  return results;
+  
+  console.log('🔍 검색 시작:', searchTerm);
+  
+  try {
+    const stmt = db.prepare(`
+      SELECT d.*, c.customer_name, c.phone, c.id as customer_id
+      FROM dogs d
+      JOIN customers c ON d.customer_id = c.id
+      WHERE (d.dog_name LIKE ? OR c.customer_name LIKE ? OR c.phone LIKE ?) 
+      AND d.deleted_at IS NULL 
+      AND c.deleted_at IS NULL 
+      ORDER BY d.dog_name 
+      LIMIT 20
+    `);
+    const searchPattern = `%${searchTerm}%`;
+    stmt.bind([searchPattern, searchPattern, searchPattern]);
+    const results = [];
+    while (stmt.step()) {
+      const dog = stmt.getAsObject();
+      if (dog.birth_date) {
+        const age = calculateAge(dog.birth_date);
+        dog.age_years = age.years;
+        dog.age_months = age.months;
+      } else {
+        dog.age_years = 0;
+        dog.age_months = 0;
+      }
+      results.push(dog);
+    }
+    stmt.free();
+    console.log(`✅ 검색 완료: ${results.length}건 발견`);
+    return results;
+  } catch (error) {
+    console.error('❌ 검색 오류:', error);
+    return [];
+  }
 }
 
 // 고객 ID로 조회 (나이 자동 계산)
