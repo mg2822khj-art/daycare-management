@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
+import * as XLSX from 'xlsx'
 
 const API_URL = '/api'
 
@@ -17,8 +18,14 @@ function Revenue() {
     notes: ''
   })
   const [revenues, setRevenues] = useState([])
+  const [filteredRevenues, setFilteredRevenues] = useState([])
   const [message, setMessage] = useState({ type: '', text: '' })
   const [isLoading, setIsLoading] = useState(false)
+  const [editingRevenue, setEditingRevenue] = useState(null)
+  const [dateFilter, setDateFilter] = useState({
+    start_date: '',
+    end_date: ''
+  })
   const searchRef = useRef(null)
 
   // 컴포넌트 마운트 시 고객 목록 및 매출 목록 불러오기
@@ -26,6 +33,15 @@ function Revenue() {
     fetchAllCustomers()
     fetchRevenues()
   }, [])
+
+  // 날짜 필터 변경 시 매출 목록 필터링
+  useEffect(() => {
+    if (dateFilter.start_date || dateFilter.end_date) {
+      fetchRevenues()
+    } else {
+      setFilteredRevenues(revenues)
+    }
+  }, [dateFilter, revenues])
 
   // 외부 클릭 감지 (검색 결과 닫기)
   useEffect(() => {
@@ -79,11 +95,18 @@ function Revenue() {
   // 매출 목록 불러오기
   const fetchRevenues = async () => {
     try {
-      const response = await axios.get(`${API_URL}/revenues`)
-      setRevenues(response.data || [])
+      const params = {}
+      if (dateFilter.start_date) params.start_date = dateFilter.start_date
+      if (dateFilter.end_date) params.end_date = dateFilter.end_date
+      
+      const response = await axios.get(`${API_URL}/revenues`, { params })
+      const revenuesData = response.data || []
+      setRevenues(revenuesData)
+      setFilteredRevenues(revenuesData)
     } catch (error) {
       console.error('매출 목록 로드 실패:', error)
       setRevenues([])
+      setFilteredRevenues([])
     }
   }
 
@@ -128,9 +151,47 @@ function Revenue() {
       sessions: 1,
       notes: ''
     })
+    setEditingRevenue(null)
   }
 
-  // 폼 제출
+  // 수정 모드 시작
+  const handleStartEdit = async (revenue) => {
+    try {
+      const response = await axios.get(`${API_URL}/revenues/${revenue.id}`)
+      const revenueData = response.data
+      
+      // 고객 찾기
+      const customer = allCustomers.find(c => 
+        c.customer_id === revenueData.customer_id && 
+        (c.dog_id === revenueData.dog_id || (!revenueData.dog_id && c.dog_name === revenueData.dog_name))
+      ) || allCustomers.find(c => c.customer_id === revenueData.customer_id)
+      
+      if (customer) {
+        setSelectedCustomer(customer)
+        setSearchTerm(`${customer.dog_name} (${customer.customer_name})`)
+      }
+      
+      setFormData({
+        service_type: revenueData.service_type,
+        payment_method: revenueData.payment_method,
+        amount: revenueData.amount,
+        sessions: revenueData.sessions || 1,
+        notes: revenueData.notes || ''
+      })
+      setEditingRevenue(revenue)
+    } catch (error) {
+      console.error('매출 정보 로드 실패:', error)
+      setMessage({ type: 'error', text: '매출 정보를 불러오는데 실패했습니다.' })
+    }
+  }
+
+  // 수정 취소
+  const handleCancelEdit = () => {
+    setEditingRevenue(null)
+    handleClearCustomer()
+  }
+
+  // 폼 제출 (등록 또는 수정)
   const handleSubmit = async (e) => {
     e.preventDefault()
     
@@ -158,7 +219,7 @@ function Revenue() {
     setMessage({ type: '', text: '' })
 
     try {
-      await axios.post(`${API_URL}/revenues`, {
+      const payload = {
         customer_id: selectedCustomer.customer_id,
         dog_id: selectedCustomer.dog_id || null,
         service_type: formData.service_type,
@@ -166,9 +227,18 @@ function Revenue() {
         amount: parseFloat(formData.amount),
         sessions: formData.service_type === '유치원' ? parseInt(formData.sessions) : 1,
         notes: formData.notes
-      })
+      }
 
-      setMessage({ type: 'success', text: '매출이 등록되었습니다.' })
+      if (editingRevenue) {
+        // 수정
+        await axios.put(`${API_URL}/revenues/${editingRevenue.id}`, payload)
+        setMessage({ type: 'success', text: '매출이 수정되었습니다.' })
+      } else {
+        // 등록
+        await axios.post(`${API_URL}/revenues`, payload)
+        setMessage({ type: 'success', text: '매출이 등록되었습니다.' })
+      }
+
       setFormData({
         service_type: '',
         payment_method: '',
@@ -178,6 +248,7 @@ function Revenue() {
       })
       setSelectedCustomer(null)
       setSearchTerm('')
+      setEditingRevenue(null)
       fetchRevenues()
       
       setTimeout(() => {
@@ -186,7 +257,7 @@ function Revenue() {
     } catch (error) {
       setMessage({
         type: 'error',
-        text: error.response?.data?.error || '매출 등록 중 오류가 발생했습니다.'
+        text: error.response?.data?.error || (editingRevenue ? '매출 수정 중 오류가 발생했습니다.' : '매출 등록 중 오류가 발생했습니다.')
       })
     } finally {
       setIsLoading(false)
@@ -214,11 +285,56 @@ function Revenue() {
     }
   }
 
+  // 날짜 필터 적용
+  const handleApplyDateFilter = () => {
+    fetchRevenues()
+  }
+
+  // 날짜 필터 초기화
+  const handleClearDateFilter = () => {
+    setDateFilter({ start_date: '', end_date: '' })
+    fetchRevenues()
+  }
+
+  // 엑셀 다운로드
+  const handleExportExcel = () => {
+    if (filteredRevenues.length === 0) {
+      setMessage({ type: 'error', text: '다운로드할 데이터가 없습니다.' })
+      return
+    }
+
+    const excelData = filteredRevenues.map((revenue, index) => ({
+      번호: index + 1,
+      등록일: new Date(revenue.created_at).toLocaleString('ko-KR'),
+      보호자명: revenue.customer_name || '',
+      강아지이름: revenue.dog_name || '',
+      연락처: revenue.phone || '',
+      서비스: revenue.service_type || '',
+      회차: revenue.service_type === '유치원' ? revenue.sessions : '-',
+      결제수단: revenue.payment_method || '',
+      금액: parseFloat(revenue.amount) || 0,
+      메모: revenue.notes || ''
+    }))
+
+    const ws = XLSX.utils.json_to_sheet(excelData)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, '매출목록')
+
+    const dateStr = new Date().toISOString().split('T')[0]
+    const fileName = `매출목록_${dateStr}.xlsx`
+    XLSX.writeFile(wb, fileName)
+
+    setMessage({ type: 'success', text: '엑셀 파일이 다운로드되었습니다.' })
+    setTimeout(() => {
+      setMessage({ type: '', text: '' })
+    }, 3000)
+  }
+
   // 총 매출 계산
-  const totalRevenue = revenues.reduce((sum, revenue) => sum + (parseFloat(revenue.amount) || 0), 0)
+  const totalRevenue = filteredRevenues.reduce((sum, revenue) => sum + (parseFloat(revenue.amount) || 0), 0)
 
   // 결제 수단별 매출 계산
-  const revenueByPayment = revenues.reduce((acc, revenue) => {
+  const revenueByPayment = filteredRevenues.reduce((acc, revenue) => {
     const method = revenue.payment_method || '기타'
     acc[method] = (acc[method] || 0) + (parseFloat(revenue.amount) || 0)
     return acc
@@ -227,9 +343,19 @@ function Revenue() {
   return (
     <div>
       <div className="card">
-        <h2 style={{ marginBottom: '20px', color: '#333' }}>
-          💰 매출 관리
-        </h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h2 style={{ margin: 0, color: '#333' }}>
+            💰 매출 관리
+          </h2>
+          <button
+            onClick={handleExportExcel}
+            className="btn btn-success"
+            disabled={filteredRevenues.length === 0}
+            style={{ padding: '10px 20px' }}
+          >
+            📥 엑셀 다운로드
+          </button>
+        </div>
 
         {message.text && (
           <div className={`alert alert-${message.type}`}>
@@ -237,8 +363,56 @@ function Revenue() {
           </div>
         )}
 
-        {/* 매출 등록 폼 */}
+        {/* 날짜 필터 */}
+        <div style={{
+          background: '#f8f9fa',
+          padding: '20px',
+          borderRadius: '8px',
+          marginBottom: '20px'
+        }}>
+          <h3 style={{ marginTop: 0, marginBottom: '15px' }}>📅 날짜별 조회</h3>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'end' }}>
+            <div style={{ flex: 1, minWidth: '150px' }}>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>시작일</label>
+              <input
+                type="date"
+                value={dateFilter.start_date}
+                onChange={(e) => setDateFilter({ ...dateFilter, start_date: e.target.value })}
+                style={{ width: '100%', padding: '8px' }}
+              />
+            </div>
+            <div style={{ flex: 1, minWidth: '150px' }}>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>종료일</label>
+              <input
+                type="date"
+                value={dateFilter.end_date}
+                onChange={(e) => setDateFilter({ ...dateFilter, end_date: e.target.value })}
+                style={{ width: '100%', padding: '8px' }}
+              />
+            </div>
+            <button
+              onClick={handleApplyDateFilter}
+              className="btn btn-primary"
+              style={{ padding: '8px 20px' }}
+            >
+              조회
+            </button>
+            <button
+              onClick={handleClearDateFilter}
+              className="btn btn-secondary"
+              style={{ padding: '8px 20px' }}
+            >
+              초기화
+            </button>
+          </div>
+        </div>
+
+        {/* 매출 등록/수정 폼 */}
         <form onSubmit={handleSubmit} style={{ marginBottom: '30px' }}>
+          <h3 style={{ marginBottom: '15px' }}>
+            {editingRevenue ? '✏️ 매출 수정' : '➕ 매출 등록'}
+          </h3>
+          
           <div style={{ marginBottom: '20px' }}>
             <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600' }}>
               고객 선택 *
@@ -422,14 +596,27 @@ function Revenue() {
             />
           </div>
 
-          <button
-            type="submit"
-            className="btn btn-success"
-            disabled={isLoading}
-            style={{ width: '100%', padding: '12px', fontSize: '1.1rem' }}
-          >
-            {isLoading ? '등록 중...' : '매출 등록'}
-          </button>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              type="submit"
+              className="btn btn-success"
+              disabled={isLoading}
+              style={{ flex: 1, padding: '12px', fontSize: '1.1rem' }}
+            >
+              {isLoading ? (editingRevenue ? '수정 중...' : '등록 중...') : (editingRevenue ? '수정' : '등록')}
+            </button>
+            {editingRevenue && (
+              <button
+                type="button"
+                onClick={handleCancelEdit}
+                className="btn btn-secondary"
+                disabled={isLoading}
+                style={{ padding: '12px 20px', fontSize: '1.1rem' }}
+              >
+                취소
+              </button>
+            )}
+          </div>
         </form>
 
         {/* 매출 통계 */}
@@ -460,14 +647,14 @@ function Revenue() {
 
         {/* 매출 목록 */}
         <div>
-          <h3 style={{ marginBottom: '15px' }}>📋 매출 목록</h3>
-          {revenues.length === 0 ? (
+          <h3 style={{ marginBottom: '15px' }}>📋 매출 목록 ({filteredRevenues.length}건)</h3>
+          {filteredRevenues.length === 0 ? (
             <div className="empty-state">
               <p>등록된 매출이 없습니다.</p>
             </div>
           ) : (
             <div style={{ display: 'grid', gap: '10px' }}>
-              {revenues.map((revenue) => (
+              {filteredRevenues.map((revenue) => (
                 <div
                   key={revenue.id}
                   style={{
@@ -483,13 +670,14 @@ function Revenue() {
                   <div style={{ flex: 1 }}>
                     <div style={{ marginBottom: '8px' }}>
                       <strong style={{ fontSize: '1.1rem', color: '#667eea' }}>
-                        {revenue.dog_name || '강아지 정보 없음'}
+                        🐕 {revenue.dog_name || '강아지 정보 없음'}
                       </strong>
                       <span style={{ marginLeft: '10px', color: '#666' }}>
-                        ({revenue.customer_name})
+                        👤 {revenue.customer_name || '보호자 정보 없음'}
                       </span>
                     </div>
                     <div style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.6' }}>
+                      <div>📞 연락처: {revenue.phone || '-'}</div>
                       <div>서비스: {revenue.service_type}</div>
                       {revenue.service_type === '유치원' && (
                         <div>회차: {revenue.sessions}회</div>
@@ -502,13 +690,20 @@ function Revenue() {
                       <div>등록일: {new Date(revenue.created_at).toLocaleString('ko-KR')}</div>
                     </div>
                   </div>
-                  <button
-                    onClick={() => handleDeleteRevenue(revenue.id)}
-                    className="btn btn-danger"
-                    style={{ marginLeft: '15px' }}
-                  >
-                    삭제
-                  </button>
+                  <div style={{ display: 'flex', gap: '10px', marginLeft: '15px' }}>
+                    <button
+                      onClick={() => handleStartEdit(revenue)}
+                      className="btn btn-primary"
+                    >
+                      수정
+                    </button>
+                    <button
+                      onClick={() => handleDeleteRevenue(revenue.id)}
+                      className="btn btn-danger"
+                    >
+                      삭제
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

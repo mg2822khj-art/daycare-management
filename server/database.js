@@ -1092,7 +1092,9 @@ export function createRevenue(customer_id, dog_id, service_type, payment_method,
 export function getAllRevenues(startDate = null, endDate = null) {
   try {
     let query = `
-      SELECT r.*, c.customer_name, c.phone, d.dog_name, d.breed
+      SELECT r.*, c.customer_name, c.phone, 
+             COALESCE(d.dog_name, c.dog_name) as dog_name,
+             COALESCE(d.breed, c.breed) as breed
       FROM revenues r
       LEFT JOIN customers c ON r.customer_id = c.id
       LEFT JOIN dogs d ON r.dog_id = d.id
@@ -1125,6 +1127,41 @@ export function getAllRevenues(startDate = null, endDate = null) {
   } catch (error) {
     console.error('매출 조회 오류:', error);
     return [];
+  }
+}
+
+// 매출 수정
+export function updateRevenue(revenue_id, customer_id, dog_id, service_type, payment_method, amount, sessions = 1, notes = '') {
+  const stmt = db.prepare(`
+    UPDATE revenues 
+    SET customer_id = ?, dog_id = ?, service_type = ?, payment_method = ?, amount = ?, sessions = ?, notes = ?
+    WHERE id = ?
+  `);
+  stmt.bind([customer_id, dog_id || null, service_type, payment_method, amount, sessions, notes, revenue_id]);
+  stmt.step();
+  stmt.free();
+  saveDatabase();
+}
+
+// 매출 ID로 조회
+export function getRevenueById(revenue_id) {
+  try {
+    const stmt = db.prepare(`
+      SELECT r.*, c.customer_name, c.phone,
+             COALESCE(d.dog_name, c.dog_name) as dog_name,
+             COALESCE(d.breed, c.breed) as breed
+      FROM revenues r
+      LEFT JOIN customers c ON r.customer_id = c.id
+      LEFT JOIN dogs d ON r.dog_id = d.id
+      WHERE r.id = ? AND r.deleted_at IS NULL
+    `);
+    stmt.bind([revenue_id]);
+    const result = stmt.step() ? stmt.getAsObject() : null;
+    stmt.free();
+    return result;
+  } catch (error) {
+    console.error('매출 조회 오류:', error);
+    return null;
   }
 }
 
