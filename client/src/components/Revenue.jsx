@@ -15,7 +15,8 @@ function Revenue() {
     payment_method: '',
     amount: '',
     sessions: 1,
-    notes: ''
+    notes: '',
+    revenue_date: ''
   })
   const [revenues, setRevenues] = useState([])
   const [filteredRevenues, setFilteredRevenues] = useState([])
@@ -149,7 +150,8 @@ function Revenue() {
       payment_method: '',
       amount: '',
       sessions: 1,
-      notes: ''
+      notes: '',
+      revenue_date: ''
     })
     setEditingRevenue(null)
   }
@@ -171,12 +173,20 @@ function Revenue() {
         setSearchTerm(`${customer.dog_name} (${customer.customer_name})`)
       }
       
+      // 날짜를 YYYY-MM-DD 형식으로 변환
+      let revenueDate = ''
+      if (revenueData.created_at) {
+        const date = new Date(revenueData.created_at)
+        revenueDate = date.toISOString().split('T')[0]
+      }
+      
       setFormData({
         service_type: revenueData.service_type,
         payment_method: revenueData.payment_method,
         amount: revenueData.amount,
         sessions: revenueData.sessions || 1,
-        notes: revenueData.notes || ''
+        notes: revenueData.notes || '',
+        revenue_date: revenueDate
       })
       setEditingRevenue(revenue)
     } catch (error) {
@@ -226,7 +236,8 @@ function Revenue() {
         payment_method: formData.payment_method,
         amount: parseFloat(formData.amount),
         sessions: formData.service_type === '유치원' ? parseInt(formData.sessions) : 1,
-        notes: formData.notes
+        notes: formData.notes,
+        revenue_date: formData.revenue_date || null
       }
 
       if (editingRevenue) {
@@ -244,7 +255,8 @@ function Revenue() {
         payment_method: '',
         amount: '',
         sessions: 1,
-        notes: ''
+        notes: '',
+        revenue_date: ''
       })
       setSelectedCustomer(null)
       setSearchTerm('')
@@ -490,6 +502,22 @@ function Revenue() {
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600' }}>
+              매출 날짜
+            </label>
+            <input
+              type="date"
+              value={formData.revenue_date}
+              onChange={(e) => setFormData({ ...formData, revenue_date: e.target.value })}
+              style={{ width: '100%', padding: '10px', fontSize: '1rem' }}
+              disabled={isLoading}
+            />
+            <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '5px' }}>
+              날짜를 선택하지 않으면 오늘 날짜로 자동 설정됩니다.
             </div>
           </div>
 

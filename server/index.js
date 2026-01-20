@@ -645,7 +645,7 @@ app.delete('/api/reservations/:reservationId', (req, res) => {
 // 매출 등록
 app.post('/api/revenues', (req, res) => {
   try {
-    const { customer_id, dog_id, service_type, payment_method, amount, sessions, notes } = req.body;
+    const { customer_id, dog_id, service_type, payment_method, amount, sessions, notes, revenue_date } = req.body;
     
     if (!customer_id || !service_type || !payment_method || !amount) {
       return res.status(400).json({ error: '필수 정보를 입력해주세요.' });
@@ -659,6 +659,17 @@ app.post('/api/revenues', (req, res) => {
       return res.status(400).json({ error: '유효하지 않은 결제 수단입니다.' });
     }
 
+    // 날짜가 제공되면 시간까지 포함한 형식으로 변환
+    let formattedDate = null;
+    if (revenue_date) {
+      // 날짜만 제공되면 시간 추가 (한국 시간 기준)
+      if (revenue_date.length === 10) {
+        formattedDate = `${revenue_date} 00:00:00`;
+      } else {
+        formattedDate = revenue_date;
+      }
+    }
+
     const result = createRevenue(
       customer_id,
       dog_id || null,
@@ -666,7 +677,8 @@ app.post('/api/revenues', (req, res) => {
       payment_method,
       parseFloat(amount),
       service_type === '유치원' ? (sessions || 1) : 1,
-      notes || ''
+      notes || '',
+      formattedDate
     );
     
     res.json({ 
@@ -708,7 +720,7 @@ app.get('/api/revenues/customer/:customerId', (req, res) => {
 app.put('/api/revenues/:revenueId', (req, res) => {
   try {
     const { revenueId } = req.params;
-    const { customer_id, dog_id, service_type, payment_method, amount, sessions, notes } = req.body;
+    const { customer_id, dog_id, service_type, payment_method, amount, sessions, notes, revenue_date } = req.body;
     
     if (!customer_id || !service_type || !payment_method || !amount) {
       return res.status(400).json({ error: '필수 정보를 입력해주세요.' });
@@ -722,6 +734,17 @@ app.put('/api/revenues/:revenueId', (req, res) => {
       return res.status(400).json({ error: '유효하지 않은 결제 수단입니다.' });
     }
 
+    // 날짜가 제공되면 시간까지 포함한 형식으로 변환
+    let formattedDate = null;
+    if (revenue_date) {
+      // 날짜만 제공되면 시간 추가 (한국 시간 기준)
+      if (revenue_date.length === 10) {
+        formattedDate = `${revenue_date} 00:00:00`;
+      } else {
+        formattedDate = revenue_date;
+      }
+    }
+
     updateRevenue(
       revenueId,
       customer_id,
@@ -730,7 +753,8 @@ app.put('/api/revenues/:revenueId', (req, res) => {
       payment_method,
       parseFloat(amount),
       service_type === '유치원' ? (sessions || 1) : 1,
-      notes || ''
+      notes || '',
+      formattedDate
     );
     
     res.json({ 

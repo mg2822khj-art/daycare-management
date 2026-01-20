@@ -1075,12 +1075,21 @@ export function deleteReservation(reservation_id) {
 }
 
 // 매출 등록
-export function createRevenue(customer_id, dog_id, service_type, payment_method, amount, sessions = 1, notes = '') {
+export function createRevenue(customer_id, dog_id, service_type, payment_method, amount, sessions = 1, notes = '', revenue_date = null) {
+  // 날짜가 제공되면 해당 날짜 사용, 없으면 현재 시간 사용
+  const dateValue = revenue_date ? revenue_date : "datetime('now', '+9 hours')";
+  
   const stmt = db.prepare(`
-    INSERT INTO revenues (customer_id, dog_id, service_type, payment_method, amount, sessions, notes)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO revenues (customer_id, dog_id, service_type, payment_method, amount, sessions, notes, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ${revenue_date ? '?' : dateValue})
   `);
-  stmt.bind([customer_id, dog_id || null, service_type, payment_method, amount, sessions, notes]);
+  
+  if (revenue_date) {
+    stmt.bind([customer_id, dog_id || null, service_type, payment_method, amount, sessions, notes, revenue_date]);
+  } else {
+    stmt.bind([customer_id, dog_id || null, service_type, payment_method, amount, sessions, notes]);
+  }
+  
   stmt.step();
   stmt.free();
   saveDatabase();
@@ -1131,13 +1140,24 @@ export function getAllRevenues(startDate = null, endDate = null) {
 }
 
 // 매출 수정
-export function updateRevenue(revenue_id, customer_id, dog_id, service_type, payment_method, amount, sessions = 1, notes = '') {
-  const stmt = db.prepare(`
+export function updateRevenue(revenue_id, customer_id, dog_id, service_type, payment_method, amount, sessions = 1, notes = '', revenue_date = null) {
+  let query = `
     UPDATE revenues 
     SET customer_id = ?, dog_id = ?, service_type = ?, payment_method = ?, amount = ?, sessions = ?, notes = ?
-    WHERE id = ?
-  `);
-  stmt.bind([customer_id, dog_id || null, service_type, payment_method, amount, sessions, notes, revenue_id]);
+  `;
+  const params = [customer_id, dog_id || null, service_type, payment_method, amount, sessions, notes];
+  
+  // 날짜가 제공되면 created_at도 업데이트
+  if (revenue_date) {
+    query += ', created_at = ?';
+    params.push(revenue_date);
+  }
+  
+  query += ' WHERE id = ?';
+  params.push(revenue_id);
+  
+  const stmt = db.prepare(query);
+  stmt.bind(params);
   stmt.step();
   stmt.free();
   saveDatabase();
