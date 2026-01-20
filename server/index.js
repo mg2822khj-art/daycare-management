@@ -28,6 +28,10 @@ import {
   getDeletedVisits,
   restoreCustomer,
   restoreVisit,
+  createRevenue,
+  getAllRevenues,
+  getRevenuesByCustomer,
+  deleteRevenue,
   createReservation,
   getReservationsByDateRange,
   getReservationsByDate,
@@ -633,6 +637,80 @@ app.delete('/api/reservations/:reservationId', (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: '예약 삭제 중 오류가 발생했습니다.' });
+  }
+});
+
+// 매출 등록
+app.post('/api/revenues', (req, res) => {
+  try {
+    const { customer_id, dog_id, service_type, payment_method, amount, sessions, notes } = req.body;
+    
+    if (!customer_id || !service_type || !payment_method || !amount) {
+      return res.status(400).json({ error: '필수 정보를 입력해주세요.' });
+    }
+
+    if (!['유치원', '데이케어', '호텔링', '목욕'].includes(service_type)) {
+      return res.status(400).json({ error: '유효하지 않은 서비스 타입입니다.' });
+    }
+
+    if (!['카드', '현금', '계좌이체'].includes(payment_method)) {
+      return res.status(400).json({ error: '유효하지 않은 결제 수단입니다.' });
+    }
+
+    const result = createRevenue(
+      customer_id,
+      dog_id || null,
+      service_type,
+      payment_method,
+      parseFloat(amount),
+      service_type === '유치원' ? (sessions || 1) : 1,
+      notes || ''
+    );
+    
+    res.json({ 
+      success: true, 
+      id: result.lastInsertRowid,
+      message: '매출이 등록되었습니다.'
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: '매출 등록 중 오류가 발생했습니다.' });
+  }
+});
+
+// 모든 매출 조회
+app.get('/api/revenues', (req, res) => {
+  try {
+    const { start_date, end_date } = req.query;
+    const revenues = getAllRevenues(start_date || null, end_date || null);
+    res.json(revenues);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: '매출 조회 중 오류가 발생했습니다.' });
+  }
+});
+
+// 고객별 매출 조회
+app.get('/api/revenues/customer/:customerId', (req, res) => {
+  try {
+    const { customerId } = req.params;
+    const revenues = getRevenuesByCustomer(customerId);
+    res.json(revenues);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: '고객별 매출 조회 중 오류가 발생했습니다.' });
+  }
+});
+
+// 매출 삭제
+app.delete('/api/revenues/:revenueId', (req, res) => {
+  try {
+    const { revenueId } = req.params;
+    deleteRevenue(revenueId);
+    res.json({ success: true, message: '매출이 삭제되었습니다.' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: '매출 삭제 중 오류가 발생했습니다.' });
   }
 });
 

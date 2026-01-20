@@ -150,6 +150,21 @@ db.run(`
     FOREIGN KEY (customer_id) REFERENCES customers (id)
   );
 
+  CREATE TABLE IF NOT EXISTS revenues (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    customer_id INTEGER NOT NULL,
+    dog_id INTEGER,
+    service_type TEXT NOT NULL,
+    payment_method TEXT NOT NULL,
+    amount REAL NOT NULL,
+    sessions INTEGER DEFAULT 1,
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    deleted_at DATETIME DEFAULT NULL,
+    FOREIGN KEY (customer_id) REFERENCES customers (id),
+    FOREIGN KEY (dog_id) REFERENCES dogs (id)
+  );
+
   CREATE INDEX IF NOT EXISTS idx_dog_name ON customers(dog_name);
   CREATE INDEX IF NOT EXISTS idx_visits_customer ON visits(customer_id);
   CREATE INDEX IF NOT EXISTS idx_visits_type ON visits(visit_type);
@@ -157,6 +172,9 @@ db.run(`
   CREATE INDEX IF NOT EXISTS idx_visits_deleted ON visits(deleted_at);
   CREATE INDEX IF NOT EXISTS idx_reservations_dates ON hoteling_reservations(start_date, end_date);
   CREATE INDEX IF NOT EXISTS idx_reservations_deleted ON hoteling_reservations(deleted_at);
+  CREATE INDEX IF NOT EXISTS idx_revenues_customer ON revenues(customer_id);
+  CREATE INDEX IF NOT EXISTS idx_revenues_created ON revenues(created_at);
+  CREATE INDEX IF NOT EXISTS idx_revenues_deleted ON revenues(deleted_at);
 `);
 
 // 기존 DB 호환성: hoteling_reservations 테이블 스키마 보정
@@ -1051,6 +1069,92 @@ export function updateReservation(reservation_id, start_date, end_date, notes, s
 export function deleteReservation(reservation_id) {
   const stmt = db.prepare("UPDATE hoteling_reservations SET deleted_at = datetime('now', '+9 hours') WHERE id = ?");
   stmt.bind([reservation_id]);
+  stmt.step();
+  stmt.free();
+  saveDatabase();
+}
+
+// 매출 등록
+export function createRevenue(customer_id, dog_id, service_type, payment_method, amount, sessions = 1, notes = '') {
+  const stmt = db.prepare(`
+    INSERT INTO revenues (customer_id, dog_id, service_type, payment_method, amount, sessions, notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+  stmt.bind([customer_id, dog_id || null, service_type, payment_method, amount, sessions, notes]);
+  stmt.step();
+  stmt.free();
+  saveDatabase();
+  const result = db.exec('SELECT last_insert_rowid() as id');
+  return { lastInsertRowid: result[0].values[0][0] };
+}
+
+// 모든 매출 조회 (삭제되지 않은 것만)
+export function getAllRevenues(startDate = null, endDate = null) {
+  try {
+    let query = `
+      SELECT r.*, c.customer_name, c.phone, d.dog_name, d.breed
+      FROM revenues r
+      LEFT JOIN customers c ON r.customer_id = c.id
+      LEFT JOIN dogs d ON r.dog_id = d.id
+      WHERE r.deleted_at IS NULL
+    `;
+    const params = [];
+    
+    if (startDate) {
+      query += ' AND DATE(r.created_at) >= ?';
+      params.push(startDate);
+    }
+    if (endDate) {
+      query += ' AND DATE(r.created_at) <= ?';
+      params.push(endDate);
+    }
+    
+    query += ' ORDER BY r.created_at DESC';
+    
+    const stmt = db.prepare(query);
+    if (params.length > 0) {
+      stmt.bind(params);
+    }
+    
+    const results = [];
+    while (stmt.step()) {
+      results.push(stmt.getAsObject());
+    }
+    stmt.free();
+    return results;
+  } catch (error) {
+    console.error('매출 조회 오류:', error);
+    return [];
+  }
+}
+
+// 고객별 매출 조회
+export function getRevenuesByCustomer(customer_id) {
+  try {
+    const stmt = db.prepare(`
+      SELECT r.*, d.dog_name, d.breed
+      FROM revenues r
+      LEFT JOIN dogs d ON r.dog_id = d.id
+      WHERE r.customer_id = ? AND r.deleted_at IS NULL
+      ORDER BY r.created_at DESC
+    `);
+    stmt.bind([customer_id]);
+    const results = [];
+    while (stmt.step()) {
+      results.push(stmt.getAsObject());
+    }
+    stmt.free();
+    return results;
+  } catch (error) {
+    console.error('고객별 매출 조회 오류:', error);
+    return [];
+  }
+}
+
+// 매출 삭제 (soft delete)
+export function deleteRevenue(revenue_id) {
+  const stmt = db.prepare("UPDATE revenues SET deleted_at = datetime('now', '+9 hours') WHERE id = ?");
+  stmt.bind([revenue_id]);
   stmt.step();
   stmt.free();
   saveDatabase();
