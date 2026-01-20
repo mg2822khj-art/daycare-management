@@ -395,30 +395,78 @@ export function findCustomerById(id) {
   }
 }
 
-// 모든 고객 조회 (삭제되지 않은 것만, 나이 자동 계산)
+// 모든 고객 조회 (삭제되지 않은 것만, 강아지 정보 포함)
 export function getAllCustomers() {
   try {
-    const result = db.exec('SELECT * FROM customers WHERE deleted_at IS NULL ORDER BY created_at DESC');
-    if (!result.length) return [];
-    const columns = result[0].columns;
-    return result[0].values.map(row => {
+    console.log('📋 모든 고객 조회 시작 (강아지 정보 포함)...');
+    
+    // 고객 정보 조회
+    const customersResult = db.exec('SELECT * FROM customers WHERE deleted_at IS NULL ORDER BY created_at DESC');
+    if (!customersResult.length) {
+      console.log('⚠️ 고객 데이터가 없습니다.');
+      return [];
+    }
+    
+    const customersColumns = customersResult[0].columns;
+    const customers = customersResult[0].values.map(row => {
       const obj = {};
-      columns.forEach((col, idx) => { obj[col] = row[idx]; });
-      // 나이 자동 계산
-      if (obj.birth_date) {
-        const age = calculateAge(obj.birth_date);
-        obj.age_years = age.years;
-        obj.age_months = age.months;
-      } else if (obj.age !== undefined && obj.age !== null) {
-        // 기존 데이터 호환성
-        obj.age_years = parseInt(obj.age) || 0;
-        obj.age_months = 0;
-      } else {
-        obj.age_years = 0;
-        obj.age_months = 0;
-      }
+      customersColumns.forEach((col, idx) => { obj[col] = row[idx]; });
+      // 나이 자동 계산 (고객의 나이가 아니라 강아지의 나이를 사용하므로 여기서는 기본값만 설정)
+      obj.age_years = 0;
+      obj.age_months = 0;
       return obj;
     });
+    
+    console.log(`📊 조회된 고객 수: ${customers.length}명`);
+    
+    // 각 고객의 강아지 정보 조회
+    const customersWithDogs = customers.map(customer => {
+      try {
+        const dogsStmt = db.prepare(`
+          SELECT * FROM dogs 
+          WHERE customer_id = ? AND deleted_at IS NULL 
+          ORDER BY created_at ASC
+        `);
+        dogsStmt.bind([customer.id]);
+        const dogs = [];
+        while (dogsStmt.step()) {
+          const dog = dogsStmt.getAsObject();
+          // 강아지 나이 계산
+          if (dog.birth_date) {
+            const age = calculateAge(dog.birth_date);
+            dog.age_years = age.years;
+            dog.age_months = age.months;
+          } else {
+            dog.age_years = 0;
+            dog.age_months = 0;
+          }
+          dogs.push(dog);
+        }
+        dogsStmt.free();
+        
+        // 고객 객체에 강아지 배열 추가
+        customer.dogs = dogs;
+        
+        // 호환성을 위해 첫 번째 강아지 정보를 고객 객체의 최상위 레벨에도 추가 (기존 코드 호환성)
+        if (dogs.length > 0) {
+          const firstDog = dogs[0];
+          customer.dog_name = firstDog.dog_name;
+          customer.breed = firstDog.breed;
+          customer.weight = firstDog.weight;
+          customer.age_years = firstDog.age_years;
+          customer.age_months = firstDog.age_months;
+        }
+        
+        return customer;
+      } catch (error) {
+        console.error(`고객 ${customer.id}의 강아지 정보 조회 오류:`, error);
+        customer.dogs = [];
+        return customer;
+      }
+    });
+    
+    console.log(`✅ 고객 조회 완료: ${customersWithDogs.length}명 (강아지 정보 포함)`);
+    return customersWithDogs;
   } catch (error) {
     console.error('고객 목록 조회 오류:', error);
     return [];

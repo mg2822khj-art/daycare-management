@@ -17,13 +17,56 @@ function App() {
   const calendarRef = useRef(null)
   const hotelingRef = useRef(null)
 
-  // 고객 목록 불러오기
+  // 고객 목록 불러오기 (평탄화된 형태로 변환)
   const fetchCustomers = async () => {
     try {
       const response = await axios.get(`${API_URL}/customers`)
-      setCustomers(response.data)
+      console.log('📋 고객 데이터 수신:', response.data?.length || 0, '건')
+      
+      // 고객별로 강아지 정보를 포함한 평탄화된 배열 생성
+      const flattenedCustomers = []
+      if (response.data && Array.isArray(response.data)) {
+        response.data.forEach(customer => {
+          if (customer.dogs && Array.isArray(customer.dogs) && customer.dogs.length > 0) {
+            // 각 강아지마다 별도의 항목으로 추가
+            customer.dogs.forEach(dog => {
+              flattenedCustomers.push({
+                id: customer.id, // 고객 ID (호환성)
+                dog_id: dog.id, // 강아지 ID
+                customer_id: customer.id,
+                dog_name: dog.dog_name,
+                customer_name: customer.customer_name,
+                phone: customer.phone,
+                breed: dog.breed,
+                age_years: dog.age_years || 0,
+                age_months: dog.age_months || 0,
+                weight: dog.weight,
+                birth_date: dog.birth_date,
+                created_at: customer.created_at
+              })
+            })
+          } else if (customer.dog_name) {
+            // 기존 호환성: dog_name이 직접 있는 경우 (구버전 데이터)
+            flattenedCustomers.push({
+              id: customer.id,
+              customer_id: customer.id,
+              dog_name: customer.dog_name,
+              customer_name: customer.customer_name,
+              phone: customer.phone,
+              breed: customer.breed,
+              age_years: customer.age_years || 0,
+              age_months: customer.age_months || 0,
+              weight: customer.weight,
+              created_at: customer.created_at
+            })
+          }
+        })
+      }
+      console.log('📊 평탄화된 고객 데이터:', flattenedCustomers.length, '건')
+      setCustomers(flattenedCustomers)
     } catch (error) {
       console.error('고객 목록 로드 실패:', error)
+      setCustomers([])
     }
   }
 

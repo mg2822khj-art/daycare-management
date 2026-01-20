@@ -62,7 +62,8 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
       const flattenedCustomers = []
       if (response.data && Array.isArray(response.data)) {
         response.data.forEach(customer => {
-          if (customer.dogs && Array.isArray(customer.dogs)) {
+          if (customer.dogs && Array.isArray(customer.dogs) && customer.dogs.length > 0) {
+            // 각 강아지마다 별도의 항목으로 추가
             customer.dogs.forEach(dog => {
               flattenedCustomers.push({
                 id: dog.id,
@@ -78,6 +79,19 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
                 birth_date: dog.birth_date
               })
             })
+          } else if (customer.dog_name) {
+            // 기존 호환성: dog_name이 직접 있는 경우 (구버전 데이터)
+            flattenedCustomers.push({
+              id: customer.id,
+              customer_id: customer.id,
+              dog_name: customer.dog_name,
+              customer_name: customer.customer_name,
+              phone: customer.phone,
+              breed: customer.breed,
+              age_years: customer.age_years || 0,
+              age_months: customer.age_months || 0,
+              weight: customer.weight
+            })
           }
         })
       }
@@ -85,6 +99,7 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
       setAllCustomers(flattenedCustomers)
     } catch (error) {
       console.error('❌ 고객 데이터 가져오기 실패:', error)
+      console.error('❌ 오류 상세:', error.response?.data || error.message)
       setAllCustomers([])
     }
   }
