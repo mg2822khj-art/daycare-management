@@ -139,10 +139,16 @@ app.get('/api/customers/autocomplete', (req, res) => {
   }
 });
 
-// 체크인 (타입 구분: daycare/hoteling, 선결제 정보)
+// 체크인 (타입 구분: daycare/hoteling, 선결제 정보 + 매출 연동)
 app.post('/api/checkin', (req, res) => {
   try {
-    const { customer_id, visit_type = 'daycare', prepaid = false, prepaid_amount = 0 } = req.body;
+    const { 
+      customer_id, 
+      visit_type = 'daycare', 
+      prepaid = false, 
+      prepaid_amount = 0,
+      prepaid_payment_method
+    } = req.body;
     
     if (!customer_id) {
       return res.status(400).json({ error: '고객을 선택해주세요.' });
@@ -167,9 +173,35 @@ app.post('/api/checkin', (req, res) => {
     // 선결제 금액 검증
     const finalPrepaidAmount = prepaid && prepaid_amount ? parseFloat(prepaid_amount) : 0;
 
+    // 호텔링 선결제가 있는 경우 결제 수단 필수
+    const validMethods = ['카드', '현금', '계좌이체'];
+    if (visit_type === 'hoteling' && finalPrepaidAmount > 0) {
+      if (!prepaid_payment_method || !validMethods.includes(prepaid_payment_method)) {
+        return res.status(400).json({ error: '선결제 결제 수단을 선택해주세요. (카드/현금/계좌이체)' });
+      }
+    }
+
     // 체크인
     const result = checkIn(customer.id, visit_type, prepaid, finalPrepaidAmount);
     const typeLabel = visit_type === 'daycare' ? '데이케어' : '호텔링';
+
+    // 호텔링 선결제 금액을 매출에 즉시 반영
+    if (visit_type === 'hoteling' && finalPrepaidAmount > 0) {
+      try {
+        createRevenue(
+          customer.id,
+          null, // dog_id는 현재 구조상 별도 테이블이 없으므로 null
+          '호텔링',
+          prepaid_payment_method,
+          finalPrepaidAmount,
+          1,
+          '호텔링 선결제'
+        );
+      } catch (revErr) {
+        console.error('선결제 매출 등록 중 오류:', revErr);
+        // 매출 등록 실패가 체크인 자체를 막지는 않도록 함
+      }
+    }
     res.json({ 
       success: true, 
       visit_id: result.lastInsertRowid,
@@ -300,13 +332,74 @@ app.post('/api/checkout/calculate', (req, res) => {
   }
 });
 
-// 체크아웃
+// 체크아웃 (요금 + 매출 자동 반영)
 app.post('/api/checkout', (req, res) => {
   try {
-    const { visit_id, checkout_time } = req.body;
+    const { visit_id, checkout_time, payment_method } = req.body;
     
     if (!visit_id) {
       return res.status(400).json({ error: '방문 ID가 필요합니다.' });
+    }
+
+    const validMethods = ['카드', '현금', '계좌이체'];
+    if (!payment_method || !validMethods.includes(payment_method)) {
+      return res.status(400).json({ error: '결제 수단을 선택해주세요. (카드/현금/계좌이체)' });
+    }
+
+    // 방문 정보 조회
+    const visit = getVisitById(visit_id);
+    if (!visit) {
+      return res.status(404).json({ error: '방문 정보를 찾을 수 없습니다.' });
+    }
+
+    if (visit.check_out) {
+      return res.status(400).json({ error: '이미 체크아웃된 방문입니다.' });
+    }
+
+    // 이용 시간 계산 (데이케어/호텔링 공통, 한국 시간 기준)
+    let duration_minutes;
+    if (checkout_time) {
+      const checkInTime = new Date(visit.check_in);
+      const checkOutTime = new Date(checkout_time);
+      duration_minutes = Math.floor((checkOutTime - checkInTime) / 1000 / 60);
+      if (duration_minutes < 0) duration_minutes = 0;
+    } else {
+      duration_minutes = calculateDuration(visit.check_in);
+    }
+
+    // 최종 결제 금액 계산 및 매출 기록
+    try {
+      let amount = 0;
+      let serviceLabel = visit.visit_type === 'daycare' ? '데이케어' : '호텔링';
+
+      if (visit.visit_type === 'daycare') {
+        const feeInfo = calculateDaycareFee(visit.weight, duration_minutes);
+        amount = feeInfo?.fee || 0;
+      } else if (visit.visit_type === 'hoteling') {
+        const feeInfo = calculateHotelingFee(visit.weight, duration_minutes, visit.prepaid_amount || 0);
+        if (feeInfo) {
+          if (visit.prepaid && (visit.prepaid_amount || 0) > 0) {
+            amount = feeInfo.remaining_fee || 0;
+          } else {
+            amount = feeInfo.total_fee || 0;
+          }
+        }
+      }
+
+      if (amount > 0) {
+        createRevenue(
+          visit.customer_id,
+          null,
+          serviceLabel,
+          payment_method,
+          amount,
+          1,
+          `${serviceLabel} 체크아웃 자동 매출`
+        );
+      }
+    } catch (revErr) {
+      console.error('체크아웃 매출 등록 중 오류:', revErr);
+      // 매출 오류가 있어도 체크아웃은 계속 처리
     }
 
     // 사용자 지정 체크아웃 시간이 있으면 그것을 사용, 없으면 현재 시간 사용

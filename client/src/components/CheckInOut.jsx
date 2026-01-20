@@ -21,6 +21,8 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
   const [editCheckOutTime, setEditCheckOutTime] = useState('')
   const [prepaid, setPrepaid] = useState(false)
   const [prepaidAmount, setPrepaidAmount] = useState('')
+  const [prepaidMethod, setPrepaidMethod] = useState('')
+  const [checkoutPaymentMethod, setCheckoutPaymentMethod] = useState('')
   const [todayReservations, setTodayReservations] = useState([])
   const [showCheckInModal, setShowCheckInModal] = useState(false)
   const [selectedReservation, setSelectedReservation] = useState(null)
@@ -233,8 +235,20 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
 
       // 호텔링이고 선결제가 체크된 경우에만 선결제 정보 추가
       if (visitType === 'hoteling' && prepaid) {
+        const amount = parseFloat(prepaidAmount) || 0
+        if (amount <= 0) {
+          setMessage({ type: 'error', text: '선결제 금액을 입력해주세요.' })
+          setIsLoading(false)
+          return
+        }
+        if (!prepaidMethod) {
+          setMessage({ type: 'error', text: '선결제 결제 수단을 선택해주세요.' })
+          setIsLoading(false)
+          return
+        }
         checkInData.prepaid = true
-        checkInData.prepaid_amount = parseFloat(prepaidAmount) || 0
+        checkInData.prepaid_amount = amount
+        checkInData.prepaid_payment_method = prepaidMethod
       }
 
       const response = await axios.post(`${API_URL}/checkin`, checkInData)
@@ -246,6 +260,7 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
       setAutoCompleteResults([])
       setPrepaid(false)
       setPrepaidAmount('')
+      setPrepaidMethod('')
       onRefresh()
       if (visitType === 'hoteling') {
         fetchTodayReservations() // 예약 목록 새로고침
@@ -265,6 +280,7 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
     setSelectedReservation(reservation)
     setPrepaid(false)
     setPrepaidAmount('')
+    setPrepaidMethod('')
     setShowCheckInModal(true)
   }
 
@@ -279,8 +295,18 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
       }
 
       if (prepaid) {
+        const amount = parseFloat(prepaidAmount) || 0
+        if (amount <= 0) {
+          setMessage({ type: 'error', text: '선결제 금액을 입력해주세요.' })
+          return
+        }
+        if (!prepaidMethod) {
+          setMessage({ type: 'error', text: '선결제 결제 수단을 선택해주세요.' })
+          return
+        }
         checkInData.prepaid = true
-        checkInData.prepaid_amount = parseFloat(prepaidAmount) || 0
+        checkInData.prepaid_amount = amount
+        checkInData.prepaid_payment_method = prepaidMethod
       }
 
       await axios.post(`${API_URL}/checkin`, checkInData)
@@ -290,6 +316,7 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
       setSelectedReservation(null)
       setPrepaid(false)
       setPrepaidAmount('')
+      setPrepaidMethod('')
       onRefresh()
       fetchTodayReservations()
     } catch (error) {
@@ -325,6 +352,7 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
       if (response.data.success && response.data.fee_info) {
         setCheckoutConfirm(visit)
         setFeeInfo(response.data.fee_info)
+        setCheckoutPaymentMethod('')
         
         // 현재 시간을 체크아웃 시간 기본값으로 설정
         const now = new Date()
@@ -352,8 +380,14 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
 
   const confirmCheckout = async (visit_id) => {
     try {
+      // 결제 수단 선택 확인
+      if (!checkoutPaymentMethod) {
+        setMessage({ type: 'error', text: '결제 수단을 선택해주세요.' })
+        return
+      }
+
       // 수정된 체크아웃 시간을 서버에 전달
-      const checkoutData = { visit_id }
+      const checkoutData = { visit_id, payment_method: checkoutPaymentMethod }
       
       if (editCheckOutTime) {
         // datetime-local 형식을 YYYY-MM-DD HH:MM:SS 형식으로 변환
@@ -386,6 +420,7 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
     setCheckoutConfirm(null)
     setFeeInfo(null)
     setEditCheckOutTime('')
+    setCheckoutPaymentMethod('')
     setIsLoading(false)
   }
 
@@ -687,7 +722,7 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
                       </label>
 
                       {prepaid && (
-                        <div style={{ marginTop: '8px' }}>
+                        <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                           <input
                             type="number"
                             value={prepaidAmount}
@@ -701,6 +736,35 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
                               fontSize: '1rem'
                             }}
                           />
+                          <div style={{ fontSize: '0.85rem', color: '#666' }}>결제 수단</div>
+                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                            {['카드', '현금', '계좌이체'].map((method) => (
+                              <label
+                                key={method}
+                                style={{
+                                  flex: '1',
+                                  minWidth: '80px',
+                                  padding: '6px 8px',
+                                  border: `2px solid ${prepaidMethod === method ? '#667eea' : '#e0e0e0'}`,
+                                  borderRadius: '6px',
+                                  cursor: 'pointer',
+                                  fontSize: '0.8rem',
+                                  textAlign: 'center',
+                                  background: prepaidMethod === method ? '#f0f4ff' : 'white'
+                                }}
+                              >
+                                <input
+                                  type="radio"
+                                  name="prepaid_method_list"
+                                  value={method}
+                                  checked={prepaidMethod === method}
+                                  onChange={(e) => setPrepaidMethod(e.target.value)}
+                                  style={{ marginRight: '4px' }}
+                                />
+                                {method}
+                              </label>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -1156,6 +1220,41 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
                 </div>
               )}
 
+              {/* 체크아웃 결제 수단 선택 */}
+              <div style={{ marginTop: '20px', paddingTop: '15px', borderTop: '1px solid #e0e0e0' }}>
+                <div style={{ fontSize: '0.95rem', fontWeight: '600', marginBottom: '8px', color: '#333' }}>
+                  결제 수단 선택
+                </div>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  {['카드', '현금', '계좌이체'].map((method) => (
+                    <label
+                      key={method}
+                      style={{
+                        flex: '1',
+                        minWidth: '90px',
+                        padding: '10px',
+                        border: `2px solid ${checkoutPaymentMethod === method ? '#667eea' : '#e0e0e0'}`,
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        textAlign: 'center',
+                        background: checkoutPaymentMethod === method ? '#f0f4ff' : 'white',
+                        fontSize: '0.9rem'
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="checkout_payment_method"
+                        value={method}
+                        checked={checkoutPaymentMethod === method}
+                        onChange={(e) => setCheckoutPaymentMethod(e.target.value)}
+                        style={{ marginRight: '6px' }}
+                      />
+                      {method}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
               {/* 에러 메시지 */}
               {feeInfo.message && (
                 <div style={{ padding: '20px', background: '#fff3cd', borderRadius: '8px', marginBottom: '15px' }}>
@@ -1283,6 +1382,37 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
                       fontSize: '1rem'
                     }}
                   />
+                  <div style={{ marginTop: '10px' }}>
+                    <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '6px' }}>결제 수단</div>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      {['카드', '현금', '계좌이체'].map((method) => (
+                        <label
+                          key={method}
+                          style={{
+                            flex: '1',
+                            minWidth: '80px',
+                            padding: '8px 10px',
+                            border: `2px solid ${prepaidMethod === method ? '#667eea' : '#e0e0e0'}`,
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontSize: '0.85rem',
+                            textAlign: 'center',
+                            background: prepaidMethod === method ? '#f0f4ff' : 'white'
+                          }}
+                        >
+                          <input
+                            type="radio"
+                            name="prepaid_method_modal"
+                            value={method}
+                            checked={prepaidMethod === method}
+                            onChange={(e) => setPrepaidMethod(e.target.value)}
+                            style={{ marginRight: '4px' }}
+                          />
+                          {method}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
