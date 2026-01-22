@@ -27,22 +27,82 @@ function Revenue() {
     start_date: '',
     end_date: ''
   })
+  const [viewMode, setViewMode] = useState('daily') // 'daily' 또는 'monthly'
+  const [selectedMonth, setSelectedMonth] = useState('') // YYYY-MM 형식
+  const [monthlyRevenues, setMonthlyRevenues] = useState([]) // 월별 집계 데이터
   const searchRef = useRef(null)
 
   // 컴포넌트 마운트 시 고객 목록 및 매출 목록 불러오기
   useEffect(() => {
     fetchAllCustomers()
     fetchRevenues()
+    // 오늘 날짜로 초기화
+    const today = new Date().toISOString().split('T')[0]
+    setDateFilter({ start_date: today, end_date: today })
+    // 현재 월로 초기화
+    const currentMonth = new Date().toISOString().slice(0, 7)
+    setSelectedMonth(currentMonth)
   }, [])
 
-  // 날짜 필터 변경 시 매출 목록 필터링
+  // 뷰 모드 변경 시 데이터 처리
   useEffect(() => {
-    if (dateFilter.start_date || dateFilter.end_date) {
-      fetchRevenues()
+    if (viewMode === 'daily') {
+      // 일일 모드: 날짜 필터 적용
+      if (dateFilter.start_date || dateFilter.end_date) {
+        fetchRevenues()
+      } else {
+        setFilteredRevenues(revenues)
+      }
     } else {
-      setFilteredRevenues(revenues)
+      // 월별 모드: 월별 집계
+      calculateMonthlyRevenues()
     }
-  }, [dateFilter, revenues])
+  }, [viewMode, dateFilter, selectedMonth, revenues])
+
+  // 월별 매출 집계 계산
+  const calculateMonthlyRevenues = () => {
+    if (!selectedMonth) {
+      setMonthlyRevenues([])
+      return
+    }
+
+    const [year, month] = selectedMonth.split('-')
+    const filtered = revenues.filter(revenue => {
+      const revenueDate = new Date(revenue.created_at)
+      return revenueDate.getFullYear() === parseInt(year) && 
+             revenueDate.getMonth() + 1 === parseInt(month)
+    })
+
+    // 일별로 그룹화
+    const dailyGroups = {}
+    filtered.forEach(revenue => {
+      const date = new Date(revenue.created_at).toISOString().split('T')[0]
+      if (!dailyGroups[date]) {
+        dailyGroups[date] = []
+      }
+      dailyGroups[date].push(revenue)
+    })
+
+    // 일별 집계 데이터 생성
+    const monthlyData = Object.entries(dailyGroups).map(([date, dayRevenues]) => {
+      const totalAmount = dayRevenues.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0)
+      const paymentMethods = dayRevenues.reduce((acc, r) => {
+        const method = r.payment_method || '기타'
+        acc[method] = (acc[method] || 0) + (parseFloat(r.amount) || 0)
+        return acc
+      }, {})
+
+      return {
+        date,
+        count: dayRevenues.length,
+        totalAmount,
+        paymentMethods,
+        revenues: dayRevenues
+      }
+    }).sort((a, b) => new Date(b.date) - new Date(a.date))
+
+    setMonthlyRevenues(monthlyData)
+  }
 
   // 외부 클릭 감지 (검색 결과 닫기)
   useEffect(() => {
@@ -299,23 +359,62 @@ function Revenue() {
 
   // 날짜 필터 적용
   const handleApplyDateFilter = () => {
-    fetchRevenues()
+    if (viewMode === 'daily') {
+      fetchRevenues()
+    }
   }
 
   // 날짜 필터 초기화
   const handleClearDateFilter = () => {
-    setDateFilter({ start_date: '', end_date: '' })
-    fetchRevenues()
+    const today = new Date().toISOString().split('T')[0]
+    setDateFilter({ start_date: today, end_date: today })
+    if (viewMode === 'daily') {
+      fetchRevenues()
+    }
+  }
+
+  // 뷰 모드 변경
+  const handleViewModeChange = (mode) => {
+    setViewMode(mode)
+    if (mode === 'daily') {
+      // 일일 모드로 전환 시 오늘 날짜로 설정
+      const today = new Date().toISOString().split('T')[0]
+      setDateFilter({ start_date: today, end_date: today })
+      fetchRevenues()
+    } else {
+      // 월별 모드로 전환 시 현재 월로 설정
+      const currentMonth = new Date().toISOString().slice(0, 7)
+      setSelectedMonth(currentMonth)
+      calculateMonthlyRevenues()
+    }
+  }
+
+  // 월 선택 변경
+  const handleMonthChange = (month) => {
+    setSelectedMonth(month)
   }
 
   // 엑셀 다운로드
   const handleExportExcel = () => {
-    if (filteredRevenues.length === 0) {
-      setMessage({ type: 'error', text: '다운로드할 데이터가 없습니다.' })
-      return
+    let dataToExport = []
+    
+    if (viewMode === 'daily') {
+      if (filteredRevenues.length === 0) {
+        setMessage({ type: 'error', text: '다운로드할 데이터가 없습니다.' })
+        return
+      }
+      dataToExport = filteredRevenues
+    } else {
+      // 월별 모드: 모든 일별 매출을 평탄화
+      const allRevenues = monthlyRevenues.flatMap(day => day.revenues)
+      if (allRevenues.length === 0) {
+        setMessage({ type: 'error', text: '다운로드할 데이터가 없습니다.' })
+        return
+      }
+      dataToExport = allRevenues
     }
 
-    const excelData = filteredRevenues.map((revenue, index) => ({
+    const excelData = dataToExport.map((revenue, index) => ({
       번호: index + 1,
       등록일: new Date(revenue.created_at).toLocaleString('ko-KR'),
       보호자명: revenue.customer_name || '',
@@ -332,8 +431,12 @@ function Revenue() {
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, '매출목록')
 
-    const dateStr = new Date().toISOString().split('T')[0]
-    const fileName = `매출목록_${dateStr}.xlsx`
+    const dateStr = viewMode === 'daily' 
+      ? dateFilter.start_date || new Date().toISOString().split('T')[0]
+      : selectedMonth || new Date().toISOString().slice(0, 7)
+    const fileName = viewMode === 'daily'
+      ? `매출목록_일일_${dateStr}.xlsx`
+      : `매출목록_월별_${dateStr}.xlsx`
     XLSX.writeFile(wb, fileName)
 
     setMessage({ type: 'success', text: '엑셀 파일이 다운로드되었습니다.' })
@@ -342,15 +445,24 @@ function Revenue() {
     }, 3000)
   }
 
-  // 총 매출 계산
-  const totalRevenue = filteredRevenues.reduce((sum, revenue) => sum + (parseFloat(revenue.amount) || 0), 0)
+  // 총 매출 계산 (일일 모드)
+  const totalRevenue = viewMode === 'daily' 
+    ? filteredRevenues.reduce((sum, revenue) => sum + (parseFloat(revenue.amount) || 0), 0)
+    : monthlyRevenues.reduce((sum, day) => sum + day.totalAmount, 0)
 
-  // 결제 수단별 매출 계산
-  const revenueByPayment = filteredRevenues.reduce((acc, revenue) => {
-    const method = revenue.payment_method || '기타'
-    acc[method] = (acc[method] || 0) + (parseFloat(revenue.amount) || 0)
-    return acc
-  }, {})
+  // 결제 수단별 매출 계산 (일일 모드)
+  const revenueByPayment = viewMode === 'daily'
+    ? filteredRevenues.reduce((acc, revenue) => {
+        const method = revenue.payment_method || '기타'
+        acc[method] = (acc[method] || 0) + (parseFloat(revenue.amount) || 0)
+        return acc
+      }, {})
+    : monthlyRevenues.reduce((acc, day) => {
+        Object.entries(day.paymentMethods).forEach(([method, amount]) => {
+          acc[method] = (acc[method] || 0) + amount
+        })
+        return acc
+      }, {})
 
   return (
     <div>
@@ -362,7 +474,11 @@ function Revenue() {
           <button
             onClick={handleExportExcel}
             className="btn btn-success"
-            disabled={filteredRevenues.length === 0}
+            disabled={
+              viewMode === 'daily' 
+                ? filteredRevenues.length === 0
+                : monthlyRevenues.reduce((sum, day) => sum + day.count, 0) === 0
+            }
             style={{ padding: '10px 20px' }}
           >
             📥 엑셀 다운로드
@@ -675,66 +791,188 @@ function Revenue() {
 
         {/* 매출 목록 */}
         <div>
-          <h3 style={{ marginBottom: '15px' }}>📋 매출 목록 ({filteredRevenues.length}건)</h3>
-          {filteredRevenues.length === 0 ? (
-            <div className="empty-state">
-              <p>등록된 매출이 없습니다.</p>
-            </div>
+          <h3 style={{ marginBottom: '15px' }}>
+            📋 {viewMode === 'daily' ? '일일 매출 목록' : '월별 매출 집계'} 
+            ({viewMode === 'daily' ? filteredRevenues.length : monthlyRevenues.reduce((sum, day) => sum + day.count, 0)}건)
+          </h3>
+          
+          {viewMode === 'daily' ? (
+            // 일일 매출 목록
+            filteredRevenues.length === 0 ? (
+              <div className="empty-state">
+                <p>해당 날짜에 등록된 매출이 없습니다.</p>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gap: '10px' }}>
+                {filteredRevenues.map((revenue) => (
+                  <div
+                    key={revenue.id}
+                    style={{
+                      background: '#f8f9fa',
+                      padding: '15px',
+                      borderRadius: '8px',
+                      border: '2px solid #e0e0e0',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}
+                  >
+                    <div style={{ flex: 1 }}>
+                      <div style={{ marginBottom: '8px' }}>
+                        <strong style={{ fontSize: '1.1rem', color: '#667eea' }}>
+                          🐕 {revenue.dog_name || '강아지 정보 없음'}
+                        </strong>
+                        <span style={{ marginLeft: '10px', color: '#666' }}>
+                          👤 {revenue.customer_name || '보호자 정보 없음'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.6' }}>
+                        <div>📞 연락처: {revenue.phone || '-'}</div>
+                        <div>서비스: {revenue.service_type}</div>
+                        {revenue.service_type === '유치원' && (
+                          <div>회차: {revenue.sessions}회</div>
+                        )}
+                        <div>결제 수단: {revenue.payment_method}</div>
+                        <div>금액: <strong style={{ color: '#28a745' }}>{parseFloat(revenue.amount).toLocaleString()}원</strong></div>
+                        {revenue.notes && (
+                          <div>메모: {revenue.notes}</div>
+                        )}
+                        <div>등록일: {new Date(revenue.created_at).toLocaleString('ko-KR')}</div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '10px', marginLeft: '15px' }}>
+                      <button
+                        onClick={() => handleStartEdit(revenue)}
+                        className="btn btn-primary"
+                      >
+                        수정
+                      </button>
+                      <button
+                        onClick={() => handleDeleteRevenue(revenue.id)}
+                        className="btn btn-danger"
+                      >
+                        삭제
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
           ) : (
-            <div style={{ display: 'grid', gap: '10px' }}>
-              {filteredRevenues.map((revenue) => (
-                <div
-                  key={revenue.id}
-                  style={{
-                    background: '#f8f9fa',
-                    padding: '15px',
-                    borderRadius: '8px',
-                    border: '2px solid #e0e0e0',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
-                  }}
-                >
-                  <div style={{ flex: 1 }}>
-                    <div style={{ marginBottom: '8px' }}>
-                      <strong style={{ fontSize: '1.1rem', color: '#667eea' }}>
-                        🐕 {revenue.dog_name || '강아지 정보 없음'}
-                      </strong>
-                      <span style={{ marginLeft: '10px', color: '#666' }}>
-                        👤 {revenue.customer_name || '보호자 정보 없음'}
-                      </span>
+            // 월별 매출 집계
+            monthlyRevenues.length === 0 ? (
+              <div className="empty-state">
+                <p>해당 월에 등록된 매출이 없습니다.</p>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gap: '15px' }}>
+                {monthlyRevenues.map((dayData) => (
+                  <div
+                    key={dayData.date}
+                    style={{
+                      background: '#f8f9fa',
+                      padding: '20px',
+                      borderRadius: '8px',
+                      border: '2px solid #e0e0e0'
+                    }}
+                  >
+                    <div style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'center',
+                      marginBottom: '15px',
+                      paddingBottom: '10px',
+                      borderBottom: '2px solid #667eea'
+                    }}>
+                      <h4 style={{ margin: 0, color: '#667eea' }}>
+                        📅 {new Date(dayData.date).toLocaleDateString('ko-KR', { 
+                          year: 'numeric', 
+                          month: 'long', 
+                          day: 'numeric',
+                          weekday: 'long'
+                        })}
+                      </h4>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: '0.9rem', color: '#666' }}>총 {dayData.count}건</div>
+                        <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#28a745' }}>
+                          {dayData.totalAmount.toLocaleString()}원
+                        </div>
+                      </div>
                     </div>
-                    <div style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.6' }}>
-                      <div>📞 연락처: {revenue.phone || '-'}</div>
-                      <div>서비스: {revenue.service_type}</div>
-                      {revenue.service_type === '유치원' && (
-                        <div>회차: {revenue.sessions}회</div>
-                      )}
-                      <div>결제 수단: {revenue.payment_method}</div>
-                      <div>금액: <strong style={{ color: '#28a745' }}>{parseFloat(revenue.amount).toLocaleString()}원</strong></div>
-                      {revenue.notes && (
-                        <div>메모: {revenue.notes}</div>
-                      )}
-                      <div>등록일: {new Date(revenue.created_at).toLocaleString('ko-KR')}</div>
+                    
+                    <div style={{ marginBottom: '15px' }}>
+                      <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '8px' }}>결제 수단별:</div>
+                      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                        {Object.entries(dayData.paymentMethods).map(([method, amount]) => (
+                          <div key={method} style={{
+                            padding: '8px 12px',
+                            background: 'white',
+                            borderRadius: '6px',
+                            border: '1px solid #e0e0e0'
+                          }}>
+                            <span style={{ fontSize: '0.85rem', color: '#666' }}>{method}: </span>
+                            <span style={{ fontWeight: '600', color: '#28a745' }}>
+                              {amount.toLocaleString()}원
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #e0e0e0' }}>
+                      <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '10px' }}>상세 내역:</div>
+                      <div style={{ display: 'grid', gap: '8px' }}>
+                        {dayData.revenues.map((revenue) => (
+                          <div
+                            key={revenue.id}
+                            style={{
+                              background: 'white',
+                              padding: '12px',
+                              borderRadius: '6px',
+                              border: '1px solid #e0e0e0',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center'
+                            }}
+                          >
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: '0.9rem' }}>
+                                <strong>{revenue.dog_name || '강아지 정보 없음'}</strong>
+                                <span style={{ marginLeft: '8px', color: '#666' }}>
+                                  ({revenue.customer_name || '보호자 정보 없음'})
+                                </span>
+                              </div>
+                              <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '4px' }}>
+                                {revenue.service_type} | {revenue.payment_method} | 
+                                <strong style={{ color: '#28a745', marginLeft: '5px' }}>
+                                  {parseFloat(revenue.amount).toLocaleString()}원
+                                </strong>
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px', marginLeft: '10px' }}>
+                              <button
+                                onClick={() => handleStartEdit(revenue)}
+                                className="btn btn-primary"
+                                style={{ padding: '6px 12px', fontSize: '0.85rem' }}
+                              >
+                                수정
+                              </button>
+                              <button
+                                onClick={() => handleDeleteRevenue(revenue.id)}
+                                className="btn btn-danger"
+                                style={{ padding: '6px 12px', fontSize: '0.85rem' }}
+                              >
+                                삭제
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: '10px', marginLeft: '15px' }}>
-                    <button
-                      onClick={() => handleStartEdit(revenue)}
-                      className="btn btn-primary"
-                    >
-                      수정
-                    </button>
-                    <button
-                      onClick={() => handleDeleteRevenue(revenue.id)}
-                      className="btn btn-danger"
-                    >
-                      삭제
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )
           )}
         </div>
       </div>
