@@ -58,13 +58,42 @@ function CustomerList({ customers, onUpdate }) {
 
   // 수정 모드 시작
   const handleStartEdit = () => {
+    // selectedCustomer에서 나이 정보 가져오기
+    // 나이가 0살 0개월인 경우 birth_date에서 계산 시도
+    let ageYears = selectedCustomer.age_years || 0
+    let ageMonths = selectedCustomer.age_months || 0
+    
+    // 나이가 0이고 birth_date가 있으면 계산
+    if ((ageYears === 0 && ageMonths === 0) && selectedCustomer.birth_date) {
+      try {
+        const today = new Date()
+        const birth = new Date(selectedCustomer.birth_date)
+        if (!isNaN(birth.getTime())) {
+          let years = today.getFullYear() - birth.getFullYear()
+          let months = today.getMonth() - birth.getMonth()
+          
+          if (months < 0) {
+            years--
+            months += 12
+          }
+          
+          if (years >= 0) {
+            ageYears = years
+            ageMonths = months
+          }
+        }
+      } catch (e) {
+        console.error('나이 계산 오류:', e)
+      }
+    }
+    
     setEditForm({
       customer_name: selectedCustomer.customer_name,
       phone: selectedCustomer.phone,
       dog_name: selectedCustomer.dog_name,
       breed: selectedCustomer.breed,
-      age_years: selectedCustomer.age_years || 0,
-      age_months: selectedCustomer.age_months || 0,
+      age_years: ageYears,
+      age_months: ageMonths,
       weight: selectedCustomer.weight || ''
     })
     setIsEditing(true)
@@ -83,15 +112,27 @@ function CustomerList({ customers, onUpdate }) {
     }
 
     try {
-      // 나이를 생년월일로 변환
+      // 나이를 생년월일로 변환 (더 정확한 계산)
       const years = parseInt(editForm.age_years) || 0
       const months = parseInt(editForm.age_months) || 0
       
       const today = new Date()
-      const birthDate = new Date(today.getFullYear() - years, today.getMonth() - months, today.getDate())
-      const birth_date = birthDate.toISOString().split('T')[0]
+      let birthYear = today.getFullYear() - years
+      let birthMonth = today.getMonth() + 1 - months // 1-12 범위
+      
+      // 월이 음수이거나 0이면 이전 해로 조정
+      if (birthMonth <= 0) {
+        birthYear -= 1
+        birthMonth += 12
+      }
+      
+      // 일은 오늘 날짜로 설정 (정확한 날짜는 알 수 없으므로)
+      const birthDay = today.getDate()
+      
+      // 생년월일 생성 (YYYY-MM-DD 형식)
+      const birth_date = `${birthYear}-${String(birthMonth).padStart(2, '0')}-${String(birthDay).padStart(2, '0')}`
 
-      await axios.put(`${API_URL}/customers/${selectedCustomer.id}`, {
+      await axios.put(`${API_URL}/customers/${selectedCustomer.customer_id || selectedCustomer.id}`, {
         customer_name: editForm.customer_name,
         phone: editForm.phone,
         dog_name: editForm.dog_name,
@@ -99,6 +140,7 @@ function CustomerList({ customers, onUpdate }) {
         birth_date: birth_date,
         weight: editForm.weight ? parseFloat(editForm.weight) : null
       })
+
       alert('고객 정보가 수정되었습니다.')
       setIsEditing(false)
       
@@ -107,6 +149,7 @@ function CustomerList({ customers, onUpdate }) {
         onUpdate()
       }
     } catch (error) {
+      console.error('고객 정보 수정 오류:', error)
       alert(error.response?.data?.error || '고객 정보 수정 중 오류가 발생했습니다.')
     }
   }

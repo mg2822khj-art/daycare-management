@@ -429,9 +429,15 @@ export function getAllCustomers() {
     const customers = customersResult[0].values.map(row => {
       const obj = {};
       customersColumns.forEach((col, idx) => { obj[col] = row[idx]; });
-      // 나이 자동 계산 (고객의 나이가 아니라 강아지의 나이를 사용하므로 여기서는 기본값만 설정)
-      obj.age_years = 0;
-      obj.age_months = 0;
+      // customers 테이블의 birth_date로 나이 계산
+      if (obj.birth_date) {
+        const age = calculateAge(obj.birth_date);
+        obj.age_years = age.years;
+        obj.age_months = age.months;
+      } else {
+        obj.age_years = 0;
+        obj.age_months = 0;
+      }
       return obj;
     });
     
@@ -471,8 +477,17 @@ export function getAllCustomers() {
           customer.dog_name = firstDog.dog_name;
           customer.breed = firstDog.breed;
           customer.weight = firstDog.weight;
-          customer.age_years = firstDog.age_years;
-          customer.age_months = firstDog.age_months;
+          // 강아지의 나이가 있으면 강아지 나이를 사용, 없으면 customers 테이블의 나이 사용
+          if (firstDog.age_years > 0 || firstDog.age_months > 0 || firstDog.birth_date) {
+            customer.age_years = firstDog.age_years;
+            customer.age_months = firstDog.age_months;
+          }
+          // 강아지의 birth_date가 있으면 그것을 사용해서 나이 재계산
+          if (firstDog.birth_date) {
+            const age = calculateAge(firstDog.birth_date);
+            customer.age_years = age.years;
+            customer.age_months = age.months;
+          }
         }
         
         return customer;
