@@ -164,10 +164,10 @@ app.post('/api/checkin', (req, res) => {
       return res.status(404).json({ error: '등록되지 않은 고객입니다.' });
     }
 
-    // 이미 체크인 중인지 확인
+    // 이미 체크인 중인지 확인 (같은 타입의 체크인만 확인)
     const currentVisit = getCustomerCurrentVisit(customer.id);
-    if (currentVisit) {
-      return res.status(400).json({ error: '이미 체크인 중입니다.' });
+    if (currentVisit && currentVisit.visit_type === visit_type) {
+      return res.status(400).json({ error: `이미 ${visit_type === 'daycare' ? '데이케어' : '호텔링'} 체크인 중입니다.` });
     }
 
     // 선결제 금액 검증

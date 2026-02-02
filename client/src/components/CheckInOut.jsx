@@ -228,10 +228,19 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
     setMessage({ type: '', text: '' })
 
     try {
+      // customer_id는 실제 고객(보호자) ID를 사용해야 함
+      const actualCustomerId = customer.customer_id || customer.id
+      
       const checkInData = {
-        customer_id: customer.id,
+        customer_id: actualCustomerId,
         visit_type: visitType
       }
+
+      console.log('📝 체크인 요청:', {
+        customer_id: actualCustomerId,
+        dog_name: customer.dog_name,
+        visit_type: visitType
+      })
 
       // 호텔링이고 선결제가 체크된 경우에만 선결제 정보 추가
       if (visitType === 'hoteling' && prepaid) {
