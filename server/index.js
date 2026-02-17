@@ -13,6 +13,7 @@ import {
   checkOut,
   checkOutWithTime,
   updateCheckInTime,
+  updateVisitPrepaid,
   getVisitById,
   calculateDuration,
   calculateDaycareFee,
@@ -259,6 +260,45 @@ app.put('/api/visits/:visitId/checkin-time', (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: '체크인 시간 수정 중 오류가 발생했습니다.' });
+  }
+});
+
+// 체크인 이후 선결제 정보 수정/취소 (호텔링)
+app.put('/api/visits/:visitId/prepaid', (req, res) => {
+  try {
+    const { visitId } = req.params;
+    const { prepaid = false, prepaid_amount = 0 } = req.body;
+
+    const visit = getVisitById(visitId);
+    if (!visit) {
+      return res.status(404).json({ error: '방문 정보를 찾을 수 없습니다.' });
+    }
+    if (visit.visit_type !== 'hoteling') {
+      return res.status(400).json({ error: '호텔링 방문만 선결제를 수정할 수 있습니다.' });
+    }
+    if (visit.check_out) {
+      return res.status(400).json({ error: '이미 체크아웃된 방문입니다.' });
+    }
+
+    const amount = prepaid ? parseFloat(prepaid_amount || 0) : 0;
+    if (amount < 0 || Number.isNaN(amount)) {
+      return res.status(400).json({ error: '유효한 선결제 금액을 입력해주세요.' });
+    }
+
+    const success = updateVisitPrepaid(visitId, prepaid, amount);
+    if (!success) {
+      return res.status(400).json({ error: '선결제 정보 수정에 실패했습니다.' });
+    }
+
+    res.json({
+      success: true,
+      prepaid: !!prepaid,
+      prepaid_amount: amount,
+      message: amount > 0 ? '선결제 금액이 수정되었습니다.' : '선결제가 취소되었습니다.'
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: '선결제 수정 중 오류가 발생했습니다.' });
   }
 });
 

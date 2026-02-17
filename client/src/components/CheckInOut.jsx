@@ -16,6 +16,8 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
   const [isLoading, setIsLoading] = useState(false)
   const [editingVisit, setEditingVisit] = useState(null)
   const [editCheckInTime, setEditCheckInTime] = useState('')
+  const [editPrepaid, setEditPrepaid] = useState(false)
+  const [editPrepaidAmount, setEditPrepaidAmount] = useState('')
   const [checkoutConfirm, setCheckoutConfirm] = useState(null)
   const [feeInfo, setFeeInfo] = useState(null)
   const [editCheckOutTime, setEditCheckOutTime] = useState('')
@@ -479,6 +481,9 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
     
     setEditingVisit(visit)
     setEditCheckInTime(datetimeLocal)
+    const currentPrepaidAmount = Number(visit.prepaid_amount || 0)
+    setEditPrepaid(Boolean(visit.prepaid) || currentPrepaidAmount > 0)
+    setEditPrepaidAmount(currentPrepaidAmount > 0 ? String(currentPrepaidAmount) : '')
   }
 
   const handleSaveCheckInTime = async () => {
@@ -497,18 +502,35 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
       // YYYY-MM-DD HH:MM:SS 형식으로 변환 (한국 시간으로 직접 저장)
       const kstString = `${year}-${month}-${day} ${hours}:${minutes}:00`
 
-      const response = await axios.put(`${API_URL}/visits/${editingVisit.id}/checkin-time`, {
+      await axios.put(`${API_URL}/visits/${editingVisit.id}/checkin-time`, {
         check_in_time: kstString
       })
 
-      setMessage({ type: 'success', text: response.data.message })
+      // 호텔링은 체크인 후에도 선결제 금액 수정/취소 허용
+      if (editingVisit.visit_type === 'hoteling') {
+        const parsedAmount = editPrepaid ? parseFloat(editPrepaidAmount || 0) : 0
+        if (editPrepaid && (Number.isNaN(parsedAmount) || parsedAmount <= 0)) {
+          setMessage({ type: 'error', text: '선결제 금액을 입력해주세요.' })
+          setIsLoading(false)
+          return
+        }
+
+        await axios.put(`${API_URL}/visits/${editingVisit.id}/prepaid`, {
+          prepaid: editPrepaid && parsedAmount > 0,
+          prepaid_amount: editPrepaid ? parsedAmount : 0
+        })
+      }
+
+      setMessage({ type: 'success', text: '수정이 완료되었습니다.' })
       setEditingVisit(null)
       setEditCheckInTime('')
+      setEditPrepaid(false)
+      setEditPrepaidAmount('')
       onRefresh()
     } catch (error) {
       setMessage({
         type: 'error',
-        text: error.response?.data?.error || '체크인 시간 수정 중 오류가 발생했습니다.'
+        text: error.response?.data?.error || '수정 중 오류가 발생했습니다.'
       })
     } finally {
       setIsLoading(false)
@@ -518,6 +540,8 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
   const handleCancelEdit = () => {
     setEditingVisit(null)
     setEditCheckInTime('')
+    setEditPrepaid(false)
+    setEditPrepaidAmount('')
   }
 
   const formatDateTime = (datetime) => {
@@ -1021,6 +1045,51 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
                 disabled={isLoading}
               />
             </div>
+            {editingVisit.visit_type === 'hoteling' && (
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  cursor: 'pointer',
+                  marginBottom: editPrepaid ? '10px' : '0'
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={editPrepaid}
+                    onChange={(e) => {
+                      setEditPrepaid(e.target.checked)
+                      if (!e.target.checked) {
+                        setEditPrepaidAmount('')
+                      }
+                    }}
+                    disabled={isLoading}
+                  />
+                  <span style={{ fontWeight: '600', color: '#333' }}>💰 선결제 적용</span>
+                </label>
+
+                {editPrepaid && (
+                  <input
+                    type="number"
+                    min="0"
+                    value={editPrepaidAmount}
+                    onChange={(e) => setEditPrepaidAmount(e.target.value)}
+                    placeholder="선결제 금액 (원)"
+                    disabled={isLoading}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: '2px solid #667eea',
+                      borderRadius: '6px',
+                      fontSize: '1rem'
+                    }}
+                  />
+                )}
+                <div style={{ fontSize: '0.8rem', color: '#777', marginTop: '6px' }}>
+                  체크 해제 후 저장하면 선결제가 취소됩니다.
+                </div>
+              </div>
+            )}
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
               <button
                 onClick={handleCancelEdit}

@@ -541,6 +541,45 @@ export function updateCheckInTime(visit_id, new_check_in_time) {
   }
 }
 
+// 방문 중인 호텔링의 선결제 정보 수정
+export function updateVisitPrepaid(visit_id, prepaid = 0, prepaid_amount = 0) {
+  try {
+    const normalizedPrepaid = prepaid ? 1 : 0;
+    const normalizedAmount = normalizedPrepaid ? (parseFloat(prepaid_amount) || 0) : 0;
+
+    // 체크아웃되지 않은 방문만 수정 허용
+    const existsStmt = db.prepare(`
+      SELECT id
+      FROM visits
+      WHERE id = ? AND check_out IS NULL
+      LIMIT 1
+    `);
+    existsStmt.bind([visit_id]);
+    const exists = existsStmt.step();
+    existsStmt.free();
+
+    if (!exists) {
+      return false;
+    }
+
+    const stmt = db.prepare(`
+      UPDATE visits
+      SET prepaid = ?,
+          prepaid_amount = ?
+      WHERE id = ? AND check_out IS NULL
+    `);
+    stmt.bind([normalizedPrepaid, normalizedAmount, visit_id]);
+    stmt.step();
+    stmt.free();
+
+    saveDatabase();
+    return true;
+  } catch (error) {
+    console.error('선결제 정보 수정 오류:', error);
+    return false;
+  }
+}
+
 // 방문 정보 조회 (체크아웃 전)
 export function getVisitById(visit_id) {
   try {
