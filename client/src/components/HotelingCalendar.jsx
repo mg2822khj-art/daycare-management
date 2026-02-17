@@ -27,6 +27,8 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
   const [feeInfo, setFeeInfo] = useState(null)
   const [editingVisit, setEditingVisit] = useState(null)
   const [editCheckInTime, setEditCheckInTime] = useState('')
+  const [editPrepaid, setEditPrepaid] = useState(false)
+  const [editPrepaidAmount, setEditPrepaidAmount] = useState('')
   const [editCheckOutTime, setEditCheckOutTime] = useState('')
   
   // 예약 폼 데이터
@@ -410,6 +412,16 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
     return visit ? visit.id : null
   }
 
+  const getReservationByCustomer = (customerId) => {
+    const merged = [...reservations, ...currentMonthReservations]
+    const uniqueReservations = Array.from(
+      new Map(merged.map((item) => [item.id, item])).values()
+    )
+    return uniqueReservations.find((reservation) =>
+      isSameCustomerId(reservation.customer_id, customerId)
+    )
+  }
+
   // 체크인 모달 열기
   const handleCheckIn = (reservation) => {
     setCheckInReservation(reservation)
@@ -557,6 +569,9 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
     const hours = String(checkInDate.getHours()).padStart(2, '0')
     const minutes = String(checkInDate.getMinutes()).padStart(2, '0')
     setEditCheckInTime(`${year}-${month}-${day}T${hours}:${minutes}`)
+    const currentPrepaidAmount = Number(visit.prepaid_amount || 0)
+    setEditPrepaid(Boolean(visit.prepaid) || currentPrepaidAmount > 0)
+    setEditPrepaidAmount(currentPrepaidAmount > 0 ? String(currentPrepaidAmount) : '')
   }
 
   // 체크인 시간 수정 확정
@@ -572,13 +587,26 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
         String(dateTime.getMinutes()).padStart(2, '0') + ':' +
         String(dateTime.getSeconds()).padStart(2, '0')
 
+      const parsedAmount = editPrepaid ? parseFloat(editPrepaidAmount || 0) : 0
+      if (editPrepaid && (Number.isNaN(parsedAmount) || parsedAmount <= 0)) {
+        alert('선결제 금액을 입력해주세요.')
+        return
+      }
+
       await axios.put(`${API_URL}/visits/${editingVisit.id}/checkin-time`, {
         check_in_time: formattedDateTime
       })
 
-      alert('체크인 시간이 수정되었습니다.')
+      await axios.put(`${API_URL}/visits/${editingVisit.id}/prepaid`, {
+        prepaid: editPrepaid && parsedAmount > 0,
+        prepaid_amount: editPrepaid ? parsedAmount : 0
+      })
+
+      alert('체크인 정보(시간/선결제)가 수정되었습니다.')
       setEditingVisit(null)
       setEditCheckInTime('')
+      setEditPrepaid(false)
+      setEditPrepaidAmount('')
       fetchCurrentVisits()
       fetchMonthReservations(selectedDate) // 캘린더 갱신
       if (onRefresh) onRefresh()
@@ -591,6 +619,8 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
   const handleCancelEdit = () => {
     setEditingVisit(null)
     setEditCheckInTime('')
+    setEditPrepaid(false)
+    setEditPrepaidAmount('')
   }
 
   // 날짜/시간 포맷팅 (과거 데이터를 위해 연도 포함)
@@ -735,6 +765,16 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
                       <div>보호자: {visit.customer_name}</div>
                       <div>체크인: {formatDateTime(visit.check_in)}</div>
                       <div>경과시간: {getElapsedTime(visit.check_in)}</div>
+                      {(() => {
+                        const reservation = getReservationByCustomer(visit.customer_id)
+                        if (!reservation) return null
+                        return (
+                          <div style={{ color: '#3b82f6', fontWeight: '600' }}>
+                            📅 예약기간: {formatDate(reservation.start_date)} ~ {formatDate(reservation.end_date)}
+                            ({calculateNights(reservation.start_date, reservation.end_date)}박)
+                          </div>
+                        )
+                      })()}
                       {visit.prepaid && visit.prepaid_amount > 0 && (
                         <div style={{ color: '#f57c00', fontWeight: '600', marginTop: '5px' }}>
                           💰 선결제: {visit.prepaid_amount.toLocaleString()}원
@@ -1295,6 +1335,48 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
                   fontSize: '1rem'
                 }}
               />
+            </div>
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                cursor: 'pointer',
+                marginBottom: editPrepaid ? '10px' : '0'
+              }}>
+                <input
+                  type="checkbox"
+                  checked={editPrepaid}
+                  onChange={(e) => {
+                    setEditPrepaid(e.target.checked)
+                    if (!e.target.checked) {
+                      setEditPrepaidAmount('')
+                    }
+                  }}
+                />
+                <span style={{ fontWeight: '600', color: '#333' }}>💰 선결제 적용</span>
+              </label>
+
+              {editPrepaid && (
+                <input
+                  type="number"
+                  min="0"
+                  value={editPrepaidAmount}
+                  onChange={(e) => setEditPrepaidAmount(e.target.value)}
+                  className="form-input"
+                  placeholder="선결제 금액 (원)"
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    border: '2px solid #667eea',
+                    borderRadius: '6px',
+                    fontSize: '1rem'
+                  }}
+                />
+              )}
+              <div style={{ fontSize: '0.8rem', color: '#777', marginTop: '6px' }}>
+                체크 해제 후 저장하면 선결제가 취소됩니다.
+              </div>
             </div>
             <div style={{ display: 'flex', gap: '10px' }}>
               <button

@@ -502,19 +502,19 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
       // YYYY-MM-DD HH:MM:SS 형식으로 변환 (한국 시간으로 직접 저장)
       const kstString = `${year}-${month}-${day} ${hours}:${minutes}:00`
 
+      const parsedAmount = editPrepaid ? parseFloat(editPrepaidAmount || 0) : 0
+      if (editingVisit.visit_type === 'hoteling' && editPrepaid && (Number.isNaN(parsedAmount) || parsedAmount <= 0)) {
+        setMessage({ type: 'error', text: '선결제 금액을 입력해주세요.' })
+        setIsLoading(false)
+        return
+      }
+
       await axios.put(`${API_URL}/visits/${editingVisit.id}/checkin-time`, {
         check_in_time: kstString
       })
 
       // 호텔링은 체크인 후에도 선결제 금액 수정/취소 허용
       if (editingVisit.visit_type === 'hoteling') {
-        const parsedAmount = editPrepaid ? parseFloat(editPrepaidAmount || 0) : 0
-        if (editPrepaid && (Number.isNaN(parsedAmount) || parsedAmount <= 0)) {
-          setMessage({ type: 'error', text: '선결제 금액을 입력해주세요.' })
-          setIsLoading(false)
-          return
-        }
-
         await axios.put(`${API_URL}/visits/${editingVisit.id}/prepaid`, {
           prepaid: editPrepaid && parsedAmount > 0,
           prepaid_amount: editPrepaid ? parsedAmount : 0
@@ -569,6 +569,17 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
     return `${minutes}분`
   }
 
+  const formatReservationPeriod = (startDate, endDate) => {
+    if (!startDate || !endDate) return ''
+    return `${new Date(startDate).toLocaleDateString('ko-KR')} ~ ${new Date(endDate).toLocaleDateString('ko-KR')}`
+  }
+
+  const getCurrentReservationByCustomer = (customerId) => {
+    return todayReservations.find((reservation) =>
+      isSameCustomerId(reservation.customer_id, customerId)
+    )
+  }
+
   const renderCurrentVisitsCard = () => (
     <div className="card">
       <h2 style={{ marginBottom: '20px', color: '#333' }}>
@@ -605,6 +616,15 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
                   <div>보호자: {visit.customer_name}</div>
                   <div>체크인: {formatDateTime(visit.check_in)}</div>
                   <div>경과시간: {getElapsedTime(visit.check_in)}</div>
+                  {visitType === 'hoteling' && (() => {
+                    const reservation = getCurrentReservationByCustomer(visit.customer_id)
+                    if (!reservation) return null
+                    return (
+                      <div style={{ color: '#3b82f6', fontWeight: '600' }}>
+                        📅 예약기간: {formatReservationPeriod(reservation.start_date, reservation.end_date)}
+                      </div>
+                    )
+                  })()}
                   {visit.prepaid && visit.prepaid_amount > 0 && (
                     <div style={{ 
                       color: '#f57c00', 
