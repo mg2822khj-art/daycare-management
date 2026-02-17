@@ -389,11 +389,18 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
   }
 
   // 체크인 상태 확인
+  const isSameCustomerId = (a, b) => String(a) === String(b)
+
   const isCheckedIn = (customerId) => {
     return currentVisits.some(visit => 
-      visit.customer_id === customerId && visit.visit_type === 'hoteling'
+      visit.visit_type === 'hoteling' && isSameCustomerId(visit.customer_id, customerId)
     )
   }
+
+  // 예약 캘린더 목록에서는 이미 체크인된 아이를 제외
+  const visibleReservations = reservations.filter(
+    reservation => !isCheckedIn(reservation.customer_id)
+  )
 
   // 체크인된 visit ID 찾기
   const getVisitId = (customerId) => {
@@ -778,22 +785,20 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
         </h3>
 
         {/* 예약 목록 */}
-        {Array.isArray(reservations) && reservations.length > 0 && (
+        {Array.isArray(visibleReservations) && visibleReservations.length > 0 && (
           <div style={{ marginBottom: '20px' }}>
             <h4 style={{ color: '#667eea', marginBottom: '10px', fontSize: '1rem' }}>
               📅 예약 목록
             </h4>
             <div style={{ display: 'grid', gap: '10px' }}>
-              {reservations.map(reservation => {
-                const checkedIn = isCheckedIn(reservation.customer_id)
-                return (
+              {visibleReservations.map(reservation => (
                   <div
                     key={reservation.id}
                     style={{
                       padding: '15px',
-                      background: checkedIn ? '#e7ffe7' : '#f8f9fa',
+                      background: '#f8f9fa',
                       borderRadius: '8px',
-                      border: `2px solid ${checkedIn ? '#28a745' : '#667eea'}`,
+                      border: '2px solid #667eea',
                       transition: 'all 0.2s'
                     }}
                   >
@@ -810,18 +815,6 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
                         <div style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>
                           🐕 {reservation.dog_name}
                         </div>
-                        {checkedIn && (
-                          <span style={{
-                            background: '#28a745',
-                            color: 'white',
-                            padding: '4px 12px',
-                            borderRadius: '12px',
-                            fontSize: '0.85rem',
-                            fontWeight: '600'
-                          }}>
-                            체크인 중
-                          </span>
-                        )}
                       </div>
                       <div style={{ color: '#666', marginBottom: '5px' }}>
                         보호자: {reservation.customer_name}
@@ -854,56 +847,20 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
                       display: 'flex',
                       gap: '8px'
                     }}>
-                      {checkedIn ? (
-                        <>
-                          <button
-                            className="btn"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              const visit = currentVisits.find(v => v.customer_id === reservation.customer_id)
-                              if (visit) handleEditCheckInTime(visit)
-                            }}
-                            style={{
-                              flex: 1,
-                              padding: '10px',
-                              fontSize: '0.95rem',
-                              background: '#6c757d',
-                              color: 'white'
-                            }}
-                          >
-                            ⏰ 시간 수정
-                          </button>
-                          <button
-                            className="btn btn-danger"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleCheckOut(reservation)
-                            }}
-                            style={{
-                              flex: 1,
-                              padding: '10px',
-                              fontSize: '0.95rem'
-                            }}
-                          >
-                            🚪 체크아웃
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          className="btn btn-success"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleCheckIn(reservation)
-                          }}
-                          style={{
-                            flex: 1,
-                            padding: '10px',
-                            fontSize: '0.95rem'
-                          }}
-                        >
-                          🏠 체크인
-                        </button>
-                      )}
+                      <button
+                        className="btn btn-success"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleCheckIn(reservation)
+                        }}
+                        style={{
+                          flex: 1,
+                          padding: '10px',
+                          fontSize: '0.95rem'
+                        }}
+                      >
+                        🏠 체크인
+                      </button>
                       <button
                         className="btn"
                         onClick={(e) => {
@@ -922,8 +879,7 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
                       </button>
                     </div>
                   </div>
-                )
-              })}
+              ))}
             </div>
           </div>
         )}
@@ -1000,7 +956,7 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
         )}
 
         {/* 데이터 없을 때 */}
-        {reservations.length === 0 && dateVisitHistory.length === 0 && (
+        {visibleReservations.length === 0 && dateVisitHistory.length === 0 && (
           <div className="empty-state">
             <p>이 날짜에 예약 및 이용 내역이 없습니다.</p>
           </div>

@@ -31,6 +31,9 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
 
   // 현재 타입의 방문만 필터링
   const filteredVisits = currentVisits.filter(visit => visit.visit_type === visitType)
+  
+  // customer_id 비교 시 문자열/숫자 타입 차이를 흡수
+  const isSameCustomerId = (a, b) => String(a) === String(b)
 
   // 컴포넌트 마운트 시 모든 고객 데이터 가져오기
   useEffect(() => {
@@ -121,9 +124,14 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
   // 체크인 상태 확인
   const isCheckedIn = (customerId) => {
     return currentVisits.some(visit => 
-      visit.customer_id === customerId && visit.visit_type === 'hoteling'
+      visit.visit_type === 'hoteling' && isSameCustomerId(visit.customer_id, customerId)
     )
   }
+
+  // 호텔링 예약 목록에서는 이미 체크인된 아이를 제외
+  const pendingTodayReservations = todayReservations.filter(
+    reservation => !isCheckedIn(reservation.customer_id)
+  )
 
   // 실시간 자동완성 검색 (클라이언트 사이드 필터링)
   useEffect(() => {
@@ -537,6 +545,92 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
     return `${minutes}분`
   }
 
+  const renderCurrentVisitsCard = () => (
+    <div className="card">
+      <h2 style={{ marginBottom: '20px', color: '#333' }}>
+        {typeEmoji} 현재 {typeLabel} 체크인 중 ({filteredVisits.length}마리)
+      </h2>
+
+      {filteredVisits.length === 0 ? (
+        <div className="empty-state">
+          <p>현재 {typeLabel} 체크인 중인 반려견이 없습니다.</p>
+        </div>
+      ) : (
+        <div className="current-visits">
+          {filteredVisits.map((visit) => (
+            <div key={visit.id} className="visit-item">
+              <div className="visit-info">
+                <div>
+                  <strong>{visit.dog_name}</strong>
+                  <span style={{ color: '#999', marginLeft: '10px' }}>
+                    ({visit.breed})
+                  </span>
+                  <span style={{ 
+                    marginLeft: '10px',
+                    padding: '2px 8px',
+                    background: visitType === 'daycare' ? '#fef3c7' : '#dbeafe',
+                    color: visitType === 'daycare' ? '#92400e' : '#1e40af',
+                    borderRadius: '4px',
+                    fontSize: '0.85rem',
+                    fontWeight: '600'
+                  }}>
+                    {typeEmoji} {typeLabel}
+                  </span>
+                </div>
+                <small style={{ display: 'block', lineHeight: '1.6' }}>
+                  <div>보호자: {visit.customer_name}</div>
+                  <div>체크인: {formatDateTime(visit.check_in)}</div>
+                  <div>경과시간: {getElapsedTime(visit.check_in)}</div>
+                  {visit.prepaid && visit.prepaid_amount > 0 && (
+                    <div style={{ 
+                      color: '#f57c00', 
+                      fontWeight: '600',
+                      marginTop: '5px'
+                    }}>
+                      💰 선결제: {visit.prepaid_amount.toLocaleString()}원
+                    </div>
+                  )}
+                </small>
+              </div>
+              <div style={{ 
+                display: 'flex', 
+                flexDirection: 'column',
+                gap: '8px', 
+                width: '100%'
+              }}>
+                <button
+                  className="btn"
+                  onClick={() => handleEditCheckInTime(visit)}
+                  disabled={isLoading}
+                  style={{
+                    background: '#6c757d',
+                    color: 'white',
+                    border: 'none',
+                    padding: '10px 15px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '0.9rem',
+                    width: '100%'
+                  }}
+                >
+                  ⏰ 시간 수정
+                </button>
+                <button
+                  className="btn btn-danger"
+                  onClick={() => handleCheckOut(visit)}
+                  disabled={isLoading}
+                  style={{ width: '100%' }}
+                >
+                  체크아웃
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+
   return (
     <div>
       <div className="card">
@@ -798,49 +892,38 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
         </p>
       </div>
 
+      {/* 호텔링 카테고리에서는 현재 호텔링 중 목록을 예약 목록보다 위에 표시 */}
+      {visitType === 'hoteling' && renderCurrentVisitsCard()}
+
       {/* 호텔링 예약 목록 */}
       {visitType === 'hoteling' && (
         <div className="card">
           <div style={{ marginBottom: '20px' }}>
             <h2 style={{ color: '#333', margin: 0 }}>
-              📅 오늘의 예약 ({todayReservations.length}건)
+              📅 오늘의 예약 ({pendingTodayReservations.length}건)
             </h2>
           </div>
 
-          {todayReservations.length === 0 ? (
+          {pendingTodayReservations.length === 0 ? (
             <div className="empty-state">
-              <p>오늘 예약이 없습니다.</p>
+              <p>오늘 대기 중인 예약이 없습니다.</p>
             </div>
           ) : (
             <div style={{ display: 'grid', gap: '10px' }}>
-              {todayReservations.map((reservation) => {
-                const checkedIn = isCheckedIn(reservation.customer_id)
-                return (
+              {pendingTodayReservations.map((reservation) => (
                   <div
                     key={reservation.id}
                     style={{
                       padding: '15px',
-                      background: checkedIn ? '#e7ffe7' : '#f8f9fa',
+                      background: '#f8f9fa',
                       borderRadius: '8px',
-                      border: `2px solid ${checkedIn ? '#28a745' : '#667eea'}`
+                      border: '2px solid #667eea'
                     }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '5px' }}>
                           🐕 {reservation.dog_name}
-                          {checkedIn && (
-                            <span style={{
-                              marginLeft: '10px',
-                              background: '#28a745',
-                              color: 'white',
-                              padding: '4px 12px',
-                              borderRadius: '12px',
-                              fontSize: '0.85rem'
-                            }}>
-                              체크인 중
-                            </span>
-                          )}
                         </div>
                         <div style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.6' }}>
                           <div>보호자: {reservation.customer_name}</div>
@@ -864,114 +947,30 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
                       </div>
                     </div>
                     <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
-                      {!checkedIn && (
-                        <button
-                          className="btn btn-success"
-                          onClick={() => handleReservationCheckIn(reservation)}
-                          style={{ flex: 1, padding: '10px' }}
-                        >
-                          🏠 체크인
-                        </button>
-                      )}
+                      <button
+                        className="btn btn-success"
+                        onClick={() => handleReservationCheckIn(reservation)}
+                        style={{ flex: 1, padding: '10px' }}
+                      >
+                        🏠 체크인
+                      </button>
                       <button
                         className="btn btn-danger"
                         onClick={() => handleDeleteReservation(reservation.id, reservation.dog_name)}
-                        style={{ flex: checkedIn ? 1 : 0, padding: '10px' }}
+                        style={{ padding: '10px' }}
                       >
-                        🗑️ {checkedIn ? '예약 삭제' : '삭제'}
+                        🗑️ 삭제
                       </button>
                     </div>
                   </div>
-                )
-              })}
+              ))}
             </div>
           )}
         </div>
       )}
 
-      <div className="card">
-        <h2 style={{ marginBottom: '20px', color: '#333' }}>
-          {typeEmoji} 현재 {typeLabel} 체크인 중 ({filteredVisits.length}마리)
-        </h2>
-
-        {filteredVisits.length === 0 ? (
-          <div className="empty-state">
-            <p>현재 {typeLabel} 체크인 중인 반려견이 없습니다.</p>
-          </div>
-        ) : (
-          <div className="current-visits">
-            {filteredVisits.map((visit) => (
-              <div key={visit.id} className="visit-item">
-                <div className="visit-info">
-                  <div>
-                    <strong>{visit.dog_name}</strong>
-                    <span style={{ color: '#999', marginLeft: '10px' }}>
-                      ({visit.breed})
-                    </span>
-                    <span style={{ 
-                      marginLeft: '10px',
-                      padding: '2px 8px',
-                      background: visitType === 'daycare' ? '#fef3c7' : '#dbeafe',
-                      color: visitType === 'daycare' ? '#92400e' : '#1e40af',
-                      borderRadius: '4px',
-                      fontSize: '0.85rem',
-                      fontWeight: '600'
-                    }}>
-                      {typeEmoji} {typeLabel}
-                    </span>
-                  </div>
-                  <small style={{ display: 'block', lineHeight: '1.6' }}>
-                    <div>보호자: {visit.customer_name}</div>
-                    <div>체크인: {formatDateTime(visit.check_in)}</div>
-                    <div>경과시간: {getElapsedTime(visit.check_in)}</div>
-                    {visit.prepaid && visit.prepaid_amount > 0 && (
-                      <div style={{ 
-                        color: '#f57c00', 
-                        fontWeight: '600',
-                        marginTop: '5px'
-                      }}>
-                        💰 선결제: {visit.prepaid_amount.toLocaleString()}원
-                      </div>
-                    )}
-                  </small>
-                </div>
-                <div style={{ 
-                  display: 'flex', 
-                  flexDirection: 'column',
-                  gap: '8px', 
-                  width: '100%'
-                }}>
-                  <button
-                    className="btn"
-                    onClick={() => handleEditCheckInTime(visit)}
-                    disabled={isLoading}
-                    style={{
-                      background: '#6c757d',
-                      color: 'white',
-                      border: 'none',
-                      padding: '10px 15px',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      fontSize: '0.9rem',
-                      width: '100%'
-                    }}
-                  >
-                    ⏰ 시간 수정
-                  </button>
-                  <button
-                    className="btn btn-danger"
-                    onClick={() => handleCheckOut(visit)}
-                    disabled={isLoading}
-                    style={{ width: '100%' }}
-                  >
-                    체크아웃
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* 데이케어 카테고리에서는 기존 위치 유지 */}
+      {visitType !== 'hoteling' && renderCurrentVisitsCard()}
 
       {/* 체크인 시간 수정 모달 */}
       {editingVisit && (
