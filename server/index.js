@@ -755,6 +755,89 @@ app.get('/api/customers/:customerId/reservations', (req, res) => {
   }
 });
 
+// 진행 중 호텔링의 종료 예정일 설정(예약 업서트)
+app.post('/api/hoteling/planned-checkout', (req, res) => {
+  try {
+    const { customer_id, end_date } = req.body;
+
+    if (!customer_id || !end_date) {
+      return res.status(400).json({ error: '고객과 종료 예정일을 입력해주세요.' });
+    }
+
+    const currentVisit = getCustomerCurrentVisit(customer_id);
+    if (!currentVisit || currentVisit.visit_type !== 'hoteling') {
+      return res.status(400).json({ error: '진행 중인 호텔링 체크인 정보를 찾을 수 없습니다.' });
+    }
+
+    const visitStartDate = String(currentVisit.check_in || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(visitStartDate)) {
+      return res.status(400).json({ error: '체크인 날짜를 확인할 수 없습니다.' });
+    }
+
+    const start = new Date(visitStartDate);
+    const end = new Date(end_date);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      return res.status(400).json({ error: '유효한 날짜를 입력해주세요.' });
+    }
+    if (end < start) {
+      return res.status(400).json({ error: '종료 예정일은 체크인 날짜보다 빠를 수 없습니다.' });
+    }
+
+    const reservations = getCustomerReservations(customer_id);
+    const coveringReservation = reservations.find(
+      (r) => r.start_date <= visitStartDate && r.end_date >= visitStartDate
+    );
+
+    if (coveringReservation) {
+      const newStartDate = coveringReservation.start_date < visitStartDate
+        ? coveringReservation.start_date
+        : visitStartDate;
+
+      updateReservation(
+        coveringReservation.id,
+        newStartDate,
+        end_date,
+        coveringReservation.notes || '진행 중 호텔링 기간 설정',
+        coveringReservation.status || 'confirmed',
+        Boolean(coveringReservation.prepaid) || Number(coveringReservation.prepaid_amount || 0) > 0,
+        Number(coveringReservation.prepaid_amount || 0),
+        coveringReservation.prepaid_payment_method || null
+      );
+
+      return res.json({
+        success: true,
+        mode: 'updated',
+        reservation_id: coveringReservation.id,
+        start_date: newStartDate,
+        end_date,
+        message: '진행 중 호텔링 종료 예정일이 저장되었습니다.'
+      });
+    }
+
+    const result = createReservation(
+      customer_id,
+      visitStartDate,
+      end_date,
+      '진행 중 호텔링 기간 설정',
+      false,
+      0,
+      null
+    );
+
+    return res.json({
+      success: true,
+      mode: 'created',
+      reservation_id: result.lastInsertRowid,
+      start_date: visitStartDate,
+      end_date,
+      message: '진행 중 호텔링 예약 기간이 생성되었습니다.'
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: '호텔링 종료 예정일 저장 중 오류가 발생했습니다.' });
+  }
+});
+
 // 예약 수정
 app.put('/api/reservations/:reservationId', (req, res) => {
   try {

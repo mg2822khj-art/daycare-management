@@ -31,6 +31,9 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
   const [editPrepaid, setEditPrepaid] = useState(false)
   const [editPrepaidAmount, setEditPrepaidAmount] = useState('')
   const [editCheckOutTime, setEditCheckOutTime] = useState('')
+  const [showPlannedCheckoutModal, setShowPlannedCheckoutModal] = useState(false)
+  const [planningVisit, setPlanningVisit] = useState(null)
+  const [plannedCheckoutInput, setPlannedCheckoutInput] = useState('')
   
   // 예약 폼 데이터
   const [formData, setFormData] = useState({
@@ -458,6 +461,43 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
     )
   }
 
+  const openPlannedCheckoutModal = (visit) => {
+    const reservation = getReservationByCustomer(visit.customer_id)
+    setPlanningVisit(visit)
+    setPlannedCheckoutInput(reservation?.end_date || '')
+    setShowPlannedCheckoutModal(true)
+  }
+
+  const closePlannedCheckoutModal = () => {
+    setShowPlannedCheckoutModal(false)
+    setPlanningVisit(null)
+    setPlannedCheckoutInput('')
+  }
+
+  const savePlannedCheckoutDate = async () => {
+    if (!planningVisit || !plannedCheckoutInput) {
+      alert('종료 예정일을 입력해주세요.')
+      return
+    }
+
+    try {
+      await axios.post(`${API_URL}/hoteling/planned-checkout`, {
+        customer_id: planningVisit.customer_id,
+        end_date: plannedCheckoutInput
+      })
+
+      alert('진행 중 호텔링 종료 예정일이 저장되었습니다.')
+      closePlannedCheckoutModal()
+      await fetchMonthReservations(selectedDate)
+      fetchDateReservations(selectedDate)
+      fetchDateVisitHistory(selectedDate)
+      fetchCurrentVisits()
+      if (onRefresh) onRefresh()
+    } catch (error) {
+      alert(error.response?.data?.error || '종료 예정일 저장 중 오류가 발생했습니다.')
+    }
+  }
+
   // 체크인 모달 열기
   const handleCheckIn = (reservation) => {
     setCheckInReservation(reservation)
@@ -848,6 +888,19 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
                     }}
                   >
                     ⏰ 시간 수정
+                  </button>
+                  <button
+                    className="btn"
+                    onClick={() => openPlannedCheckoutModal(visit)}
+                    style={{
+                      flex: 1,
+                      padding: '8px',
+                      background: '#0ea5e9',
+                      color: 'white',
+                      fontSize: '0.9rem'
+                    }}
+                  >
+                    📅 종료일 설정
                   </button>
                   <button
                     className="btn btn-danger"
@@ -1591,6 +1644,52 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
                 style={{ flex: 1, background: '#6c757d', color: 'white' }}
               >
                 취소
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 진행 중 호텔링 종료 예정일 설정 모달 */}
+      {showPlannedCheckoutModal && planningVisit && (
+        <div className="modal-overlay" onClick={closePlannedCheckoutModal}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ marginBottom: '16px' }}>📅 호텔링 종료 예정일 설정</h3>
+            <div style={{ marginBottom: '10px', color: '#555' }}>
+              <strong>{planningVisit.dog_name}</strong> ({planningVisit.customer_name}님)
+            </div>
+            <div style={{ marginBottom: '16px', fontSize: '0.9rem', color: '#777' }}>
+              종료 예정일을 저장하면 예약 캘린더에 즉시 반영됩니다.
+            </div>
+            <input
+              type="date"
+              value={plannedCheckoutInput}
+              min={String(planningVisit.check_in || '').slice(0, 10)}
+              onChange={(e) => setPlannedCheckoutInput(e.target.value)}
+              className="form-input"
+              style={{
+                width: '100%',
+                padding: '10px',
+                border: '2px solid #0ea5e9',
+                borderRadius: '6px',
+                fontSize: '1rem',
+                marginBottom: '16px'
+              }}
+            />
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={closePlannedCheckoutModal}
+                className="btn"
+                style={{ flex: 1, background: '#6c757d', color: 'white' }}
+              >
+                취소
+              </button>
+              <button
+                onClick={savePlannedCheckoutDate}
+                className="btn btn-primary"
+                style={{ flex: 1 }}
+              >
+                저장
               </button>
             </div>
           </div>

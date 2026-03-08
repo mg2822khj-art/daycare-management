@@ -30,6 +30,9 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
   const [showCheckInModal, setShowCheckInModal] = useState(false)
   const [selectedReservation, setSelectedReservation] = useState(null)
   const [allCustomers, setAllCustomers] = useState([]) // 모든 고객 데이터 저장
+  const [showPlannedCheckoutModal, setShowPlannedCheckoutModal] = useState(false)
+  const [planningVisit, setPlanningVisit] = useState(null)
+  const [plannedCheckoutInput, setPlannedCheckoutInput] = useState('')
   const autoCompleteRef = useRef(null)
 
   // 현재 타입의 방문만 필터링
@@ -611,6 +614,45 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
     )
   }
 
+  const openPlannedCheckoutModal = (visit) => {
+    const reservation = getCurrentReservationByCustomer(visit.customer_id)
+    setPlanningVisit(visit)
+    setPlannedCheckoutInput(reservation?.end_date || '')
+    setShowPlannedCheckoutModal(true)
+  }
+
+  const closePlannedCheckoutModal = () => {
+    setShowPlannedCheckoutModal(false)
+    setPlanningVisit(null)
+    setPlannedCheckoutInput('')
+  }
+
+  const savePlannedCheckoutDate = async () => {
+    if (!planningVisit || !plannedCheckoutInput) {
+      setMessage({ type: 'error', text: '종료 예정일을 입력해주세요.' })
+      return
+    }
+
+    try {
+      setIsLoading(true)
+      await axios.post(`${API_URL}/hoteling/planned-checkout`, {
+        customer_id: planningVisit.customer_id,
+        end_date: plannedCheckoutInput
+      })
+      setMessage({ type: 'success', text: '진행 중 호텔링 종료 예정일이 저장되었습니다.' })
+      closePlannedCheckoutModal()
+      onRefresh()
+      fetchTodayReservations()
+    } catch (error) {
+      setMessage({
+        type: 'error',
+        text: error.response?.data?.error || '종료 예정일 저장 중 오류가 발생했습니다.'
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const renderCurrentVisitsCard = () => (
     <div className="card">
       <h2 style={{ marginBottom: '20px', color: '#333' }}>
@@ -690,6 +732,25 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
                 >
                   ⏰ 시간 수정
                 </button>
+                {visitType === 'hoteling' && (
+                  <button
+                    className="btn"
+                    onClick={() => openPlannedCheckoutModal(visit)}
+                    disabled={isLoading}
+                    style={{
+                      background: '#0ea5e9',
+                      color: 'white',
+                      border: 'none',
+                      padding: '10px 15px',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '0.9rem',
+                      width: '100%'
+                    }}
+                  >
+                    📅 종료일 설정
+                  </button>
+                )}
                 <button
                   className="btn btn-danger"
                   onClick={() => handleCheckOut(visit)}
@@ -1581,6 +1642,70 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
                 style={{ flex: 1, background: '#6c757d', color: 'white' }}
               >
                 취소
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 진행 중 호텔링 종료 예정일 설정 모달 */}
+      {showPlannedCheckoutModal && planningVisit && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 2000
+        }} onClick={closePlannedCheckoutModal}>
+          <div style={{
+            background: 'white',
+            padding: '28px',
+            borderRadius: '12px',
+            maxWidth: '440px',
+            width: '90%',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.25)'
+          }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ marginBottom: '16px', color: '#333' }}>📅 호텔링 종료 예정일 설정</h3>
+            <div style={{ marginBottom: '12px', color: '#555', lineHeight: '1.6' }}>
+              <div><strong>{planningVisit.dog_name}</strong> ({planningVisit.customer_name}님)</div>
+              <div style={{ fontSize: '0.9rem', color: '#777' }}>
+                체크인 후에도 종료 예정일을 설정하면 예약 캘린더에 반영됩니다.
+              </div>
+            </div>
+            <input
+              type="date"
+              value={plannedCheckoutInput}
+              min={String(planningVisit.check_in || '').slice(0, 10)}
+              onChange={(e) => setPlannedCheckoutInput(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '10px',
+                border: '2px solid #0ea5e9',
+                borderRadius: '6px',
+                fontSize: '1rem',
+                marginBottom: '16px'
+              }}
+            />
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={closePlannedCheckoutModal}
+                className="btn"
+                style={{ flex: 1, background: '#6c757d', color: 'white' }}
+              >
+                취소
+              </button>
+              <button
+                onClick={savePlannedCheckoutDate}
+                className="btn btn-primary"
+                disabled={isLoading || !plannedCheckoutInput}
+                style={{ flex: 1 }}
+              >
+                저장
               </button>
             </div>
           </div>
