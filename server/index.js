@@ -641,7 +641,15 @@ app.post('/api/trash/visits/:visitId/restore', (req, res) => {
 // 예약 생성
 app.post('/api/reservations', (req, res) => {
   try {
-    const { customer_id, start_date, end_date, notes } = req.body;
+    const {
+      customer_id,
+      start_date,
+      end_date,
+      notes,
+      prepaid = false,
+      prepaid_amount = 0,
+      prepaid_payment_method
+    } = req.body;
     
     if (!customer_id || !start_date || !end_date) {
       return res.status(400).json({ error: '고객, 시작일, 종료일을 입력해주세요.' });
@@ -654,13 +662,31 @@ app.post('/api/reservations', (req, res) => {
       return res.status(400).json({ error: '시작일이 종료일보다 늦을 수 없습니다.' });
     }
 
+    const parsedPrepaidAmount = prepaid ? parseFloat(prepaid_amount || 0) : 0;
+    if (Number.isNaN(parsedPrepaidAmount) || parsedPrepaidAmount < 0) {
+      return res.status(400).json({ error: '유효한 선결제 금액을 입력해주세요.' });
+    }
+
+    const validMethods = ['카드', '현금', '계좌이체'];
+    if (parsedPrepaidAmount > 0 && (!prepaid_payment_method || !validMethods.includes(prepaid_payment_method))) {
+      return res.status(400).json({ error: '선결제 결제 수단을 선택해주세요. (카드/현금/계좌이체)' });
+    }
+
     // 고객 존재 확인
     const customer = findCustomerById(customer_id);
     if (!customer) {
       return res.status(404).json({ error: '등록되지 않은 고객입니다.' });
     }
 
-    const result = createReservation(customer_id, start_date, end_date, notes || '');
+    const result = createReservation(
+      customer_id,
+      start_date,
+      end_date,
+      notes || '',
+      parsedPrepaidAmount > 0,
+      parsedPrepaidAmount,
+      parsedPrepaidAmount > 0 ? (prepaid_payment_method || null) : null
+    );
     res.json({ 
       success: true, 
       id: result.lastInsertRowid,
@@ -733,7 +759,15 @@ app.get('/api/customers/:customerId/reservations', (req, res) => {
 app.put('/api/reservations/:reservationId', (req, res) => {
   try {
     const { reservationId } = req.params;
-    const { start_date, end_date, notes, status } = req.body;
+    const {
+      start_date,
+      end_date,
+      notes,
+      status,
+      prepaid = false,
+      prepaid_amount = 0,
+      prepaid_payment_method
+    } = req.body;
     
     if (!start_date || !end_date) {
       return res.status(400).json({ error: '시작일과 종료일을 입력해주세요.' });
@@ -746,13 +780,32 @@ app.put('/api/reservations/:reservationId', (req, res) => {
       return res.status(400).json({ error: '시작일이 종료일보다 늦을 수 없습니다.' });
     }
 
+    const parsedPrepaidAmount = prepaid ? parseFloat(prepaid_amount || 0) : 0;
+    if (Number.isNaN(parsedPrepaidAmount) || parsedPrepaidAmount < 0) {
+      return res.status(400).json({ error: '유효한 선결제 금액을 입력해주세요.' });
+    }
+
+    const validMethods = ['카드', '현금', '계좌이체'];
+    if (parsedPrepaidAmount > 0 && (!prepaid_payment_method || !validMethods.includes(prepaid_payment_method))) {
+      return res.status(400).json({ error: '선결제 결제 수단을 선택해주세요. (카드/현금/계좌이체)' });
+    }
+
     // 예약 존재 확인
     const reservation = getReservationById(reservationId);
     if (!reservation) {
       return res.status(404).json({ error: '예약을 찾을 수 없습니다.' });
     }
 
-    updateReservation(reservationId, start_date, end_date, notes || '', status || 'confirmed');
+    updateReservation(
+      reservationId,
+      start_date,
+      end_date,
+      notes || '',
+      status || 'confirmed',
+      parsedPrepaidAmount > 0,
+      parsedPrepaidAmount,
+      parsedPrepaidAmount > 0 ? (prepaid_payment_method || null) : null
+    );
     res.json({ 
       success: true, 
       message: '예약이 수정되었습니다.'

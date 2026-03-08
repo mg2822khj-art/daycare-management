@@ -23,6 +23,7 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
   const [checkInReservation, setCheckInReservation] = useState(null)
   const [prepaid, setPrepaid] = useState(false)
   const [prepaidAmount, setPrepaidAmount] = useState('')
+  const [prepaidMethod, setPrepaidMethod] = useState('')
   const [checkoutConfirm, setCheckoutConfirm] = useState(null)
   const [feeInfo, setFeeInfo] = useState(null)
   const [editingVisit, setEditingVisit] = useState(null)
@@ -38,7 +39,10 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
     dog_name: '',
     start_date: '',
     end_date: '',
-    notes: ''
+    notes: '',
+    prepaid: false,
+    prepaid_amount: '',
+    prepaid_payment_method: ''
   })
 
   // refreshTrigger가 변경되면 데이터 새로고침
@@ -275,7 +279,10 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
       dog_name: '',
       start_date: dateStr,
       end_date: dateStr,
-      notes: ''
+      notes: '',
+      prepaid: false,
+      prepaid_amount: '',
+      prepaid_payment_method: ''
     })
     setSearchTerm('')
     setSearchResults([])
@@ -291,7 +298,10 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
       dog_name: reservation.dog_name,
       start_date: reservation.start_date,
       end_date: reservation.end_date,
-      notes: reservation.notes || ''
+      notes: reservation.notes || '',
+      prepaid: Boolean(reservation.prepaid) || Number(reservation.prepaid_amount || 0) > 0,
+      prepaid_amount: Number(reservation.prepaid_amount || 0) > 0 ? String(reservation.prepaid_amount) : '',
+      prepaid_payment_method: reservation.prepaid_payment_method || ''
     })
     setSearchTerm(`${reservation.dog_name} (${reservation.customer_name})`)
     setShowEditModal(true)
@@ -333,12 +343,25 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
       notes: formData.notes
     })
 
+    const parsedPrepaidAmount = formData.prepaid ? parseFloat(formData.prepaid_amount || 0) : 0
+    if (formData.prepaid && (Number.isNaN(parsedPrepaidAmount) || parsedPrepaidAmount <= 0)) {
+      alert('선결제 금액을 입력해주세요.')
+      return
+    }
+    if (formData.prepaid && !formData.prepaid_payment_method) {
+      alert('선결제 결제 수단을 선택해주세요.')
+      return
+    }
+
     try {
       const response = await axios.post(`${API_URL}/reservations`, {
         customer_id: customerId,
         start_date: formData.start_date,
         end_date: formData.end_date,
-        notes: formData.notes
+        notes: formData.notes,
+        prepaid: formData.prepaid && parsedPrepaidAmount > 0,
+        prepaid_amount: formData.prepaid ? parsedPrepaidAmount : 0,
+        prepaid_payment_method: formData.prepaid ? formData.prepaid_payment_method : null
       })
       
       console.log('✅ 예약 생성 성공:', response.data)
@@ -355,13 +378,26 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
   // 예약 수정
   const handleUpdateReservation = async (e) => {
     e.preventDefault()
+
+    const parsedPrepaidAmount = formData.prepaid ? parseFloat(formData.prepaid_amount || 0) : 0
+    if (formData.prepaid && (Number.isNaN(parsedPrepaidAmount) || parsedPrepaidAmount <= 0)) {
+      alert('선결제 금액을 입력해주세요.')
+      return
+    }
+    if (formData.prepaid && !formData.prepaid_payment_method) {
+      alert('선결제 결제 수단을 선택해주세요.')
+      return
+    }
     
     try {
       await axios.put(`${API_URL}/reservations/${selectedReservation.id}`, {
         start_date: formData.start_date,
         end_date: formData.end_date,
         notes: formData.notes,
-        status: 'confirmed'
+        status: 'confirmed',
+        prepaid: formData.prepaid && parsedPrepaidAmount > 0,
+        prepaid_amount: formData.prepaid ? parsedPrepaidAmount : 0,
+        prepaid_payment_method: formData.prepaid ? formData.prepaid_payment_method : null
       })
       
       alert('예약이 수정되었습니다.')
@@ -425,8 +461,11 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
   // 체크인 모달 열기
   const handleCheckIn = (reservation) => {
     setCheckInReservation(reservation)
-    setPrepaid(false)
-    setPrepaidAmount('')
+    const reservedPrepaidAmount = Number(reservation.prepaid_amount || 0)
+    const hasReservedPrepaid = Boolean(reservation.prepaid) || reservedPrepaidAmount > 0
+    setPrepaid(hasReservedPrepaid)
+    setPrepaidAmount(hasReservedPrepaid && reservedPrepaidAmount > 0 ? String(reservedPrepaidAmount) : '')
+    setPrepaidMethod(hasReservedPrepaid ? (reservation.prepaid_payment_method || '') : '')
     setShowCheckInModal(true)
   }
 
@@ -442,8 +481,18 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
 
       // 선결제가 체크된 경우에만 선결제 정보 추가
       if (prepaid) {
+        const amount = parseFloat(prepaidAmount) || 0
+        if (amount <= 0) {
+          alert('선결제 금액을 입력해주세요.')
+          return
+        }
+        if (!prepaidMethod) {
+          alert('선결제 결제 수단을 선택해주세요.')
+          return
+        }
         checkInData.prepaid = true
-        checkInData.prepaid_amount = parseFloat(prepaidAmount) || 0
+        checkInData.prepaid_amount = amount
+        checkInData.prepaid_payment_method = prepaidMethod
       }
 
       await axios.post(`${API_URL}/checkin`, checkInData)
@@ -451,6 +500,9 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
       alert(`${checkInReservation.dog_name} 체크인 완료!`)
       setShowCheckInModal(false)
       setCheckInReservation(null)
+      setPrepaid(false)
+      setPrepaidAmount('')
+      setPrepaidMethod('')
       fetchCurrentVisits()
       if (onRefresh) onRefresh() // 호텔링 탭 새로고침
     } catch (error) {
@@ -1093,6 +1145,64 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
 
               {/* 메모 */}
               <div className="form-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <input
+                    type="checkbox"
+                    checked={formData.prepaid}
+                    onChange={(e) => {
+                      const checked = e.target.checked
+                      setFormData({
+                        ...formData,
+                        prepaid: checked,
+                        prepaid_amount: checked ? formData.prepaid_amount : '',
+                        prepaid_payment_method: checked ? formData.prepaid_payment_method : ''
+                      })
+                    }}
+                  />
+                  <span>💰 선결제 입력</span>
+                </label>
+                {formData.prepaid && (
+                  <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <input
+                      type="number"
+                      min="0"
+                      value={formData.prepaid_amount}
+                      onChange={(e) => setFormData({ ...formData, prepaid_amount: e.target.value })}
+                      className="form-input"
+                      placeholder="선결제 금액 (원)"
+                    />
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      {['카드', '현금', '계좌이체'].map((method) => (
+                        <label
+                          key={method}
+                          style={{
+                            flex: 1,
+                            minWidth: '90px',
+                            padding: '8px',
+                            border: `2px solid ${formData.prepaid_payment_method === method ? '#667eea' : '#e0e0e0'}`,
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            textAlign: 'center',
+                            background: formData.prepaid_payment_method === method ? '#f0f4ff' : 'white'
+                          }}
+                        >
+                          <input
+                            type="radio"
+                            name="reservation_prepaid_method"
+                            value={method}
+                            checked={formData.prepaid_payment_method === method}
+                            onChange={(e) => setFormData({ ...formData, prepaid_payment_method: e.target.value })}
+                            style={{ marginRight: '4px' }}
+                          />
+                          {method}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="form-group">
                 <label>메모</label>
                 <textarea
                   value={formData.notes}
@@ -1165,6 +1275,64 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
               </div>
 
               {/* 메모 */}
+              <div className="form-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <input
+                    type="checkbox"
+                    checked={formData.prepaid}
+                    onChange={(e) => {
+                      const checked = e.target.checked
+                      setFormData({
+                        ...formData,
+                        prepaid: checked,
+                        prepaid_amount: checked ? formData.prepaid_amount : '',
+                        prepaid_payment_method: checked ? formData.prepaid_payment_method : ''
+                      })
+                    }}
+                  />
+                  <span>💰 선결제 입력</span>
+                </label>
+                {formData.prepaid && (
+                  <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <input
+                      type="number"
+                      min="0"
+                      value={formData.prepaid_amount}
+                      onChange={(e) => setFormData({ ...formData, prepaid_amount: e.target.value })}
+                      className="form-input"
+                      placeholder="선결제 금액 (원)"
+                    />
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      {['카드', '현금', '계좌이체'].map((method) => (
+                        <label
+                          key={method}
+                          style={{
+                            flex: 1,
+                            minWidth: '90px',
+                            padding: '8px',
+                            border: `2px solid ${formData.prepaid_payment_method === method ? '#667eea' : '#e0e0e0'}`,
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            textAlign: 'center',
+                            background: formData.prepaid_payment_method === method ? '#f0f4ff' : 'white'
+                          }}
+                        >
+                          <input
+                            type="radio"
+                            name="reservation_edit_prepaid_method"
+                            value={method}
+                            checked={formData.prepaid_payment_method === method}
+                            onChange={(e) => setFormData({ ...formData, prepaid_payment_method: e.target.value })}
+                            style={{ marginRight: '4px' }}
+                          />
+                          {method}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="form-group">
                 <label>메모</label>
                 <textarea
@@ -1283,6 +1451,37 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
                       fontSize: '1rem'
                     }}
                   />
+                  <div style={{ marginTop: '10px' }}>
+                    <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '6px' }}>결제 수단</div>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      {['카드', '현금', '계좌이체'].map((method) => (
+                        <label
+                          key={method}
+                          style={{
+                            flex: '1',
+                            minWidth: '80px',
+                            padding: '8px 10px',
+                            border: `2px solid ${prepaidMethod === method ? '#667eea' : '#e0e0e0'}`,
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontSize: '0.85rem',
+                            textAlign: 'center',
+                            background: prepaidMethod === method ? '#f0f4ff' : 'white'
+                          }}
+                        >
+                          <input
+                            type="radio"
+                            name="calendar_checkin_prepaid_method"
+                            value={method}
+                            checked={prepaidMethod === method}
+                            onChange={(e) => setPrepaidMethod(e.target.value)}
+                            style={{ marginRight: '4px' }}
+                          />
+                          {method}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

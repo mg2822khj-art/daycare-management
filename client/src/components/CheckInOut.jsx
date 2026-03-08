@@ -24,6 +24,7 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
   const [prepaid, setPrepaid] = useState(false)
   const [prepaidAmount, setPrepaidAmount] = useState('')
   const [prepaidMethod, setPrepaidMethod] = useState('')
+  const [plannedCheckoutDate, setPlannedCheckoutDate] = useState('')
   const [checkoutPaymentMethod, setCheckoutPaymentMethod] = useState('')
   const [todayReservations, setTodayReservations] = useState([])
   const [showCheckInModal, setShowCheckInModal] = useState(false)
@@ -272,7 +273,33 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
 
       const response = await axios.post(`${API_URL}/checkin`, checkInData)
 
-      setMessage({ type: 'success', text: response.data.message })
+      let reservationMessage = ''
+      if (visitType === 'hoteling' && plannedCheckoutDate) {
+        const today = new Date().toISOString().split('T')[0]
+        if (plannedCheckoutDate < today) {
+          setMessage({ type: 'error', text: '종료 예정일은 오늘 이후로 입력해주세요.' })
+          setIsLoading(false)
+          return
+        }
+
+        try {
+          await axios.post(`${API_URL}/reservations`, {
+            customer_id: actualCustomerId,
+            start_date: today,
+            end_date: plannedCheckoutDate,
+            notes: '빠른 체크인 시 자동 생성된 호텔링 기간',
+            prepaid: prepaid && (parseFloat(prepaidAmount) || 0) > 0,
+            prepaid_amount: prepaid ? (parseFloat(prepaidAmount) || 0) : 0,
+            prepaid_payment_method: prepaid ? prepaidMethod : null
+          })
+          reservationMessage = ' (호텔링 종료 예정일도 함께 저장됨)'
+        } catch (reservationError) {
+          console.error('빠른 체크인 예약 자동 생성 실패:', reservationError)
+          reservationMessage = ' (체크인은 완료되었지만 종료 예정일 저장은 실패)'
+        }
+      }
+
+      setMessage({ type: 'success', text: `${response.data.message}${reservationMessage}` })
       setDogName('')
       setSearchResults([])
       setShowResults(false)
@@ -280,6 +307,7 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
       setPrepaid(false)
       setPrepaidAmount('')
       setPrepaidMethod('')
+      setPlannedCheckoutDate('')
       onRefresh()
       if (visitType === 'hoteling') {
         fetchTodayReservations() // 예약 목록 새로고침
@@ -297,9 +325,11 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
   // 예약에서 체크인
   const handleReservationCheckIn = (reservation) => {
     setSelectedReservation(reservation)
-    setPrepaid(false)
-    setPrepaidAmount('')
-    setPrepaidMethod('')
+    const reservedPrepaidAmount = Number(reservation.prepaid_amount || 0)
+    const hasReservedPrepaid = Boolean(reservation.prepaid) || reservedPrepaidAmount > 0
+    setPrepaid(hasReservedPrepaid)
+    setPrepaidAmount(hasReservedPrepaid && reservedPrepaidAmount > 0 ? String(reservedPrepaidAmount) : '')
+    setPrepaidMethod(hasReservedPrepaid ? (reservation.prepaid_payment_method || '') : '')
     setShowCheckInModal(true)
   }
 
@@ -336,6 +366,7 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
       setPrepaid(false)
       setPrepaidAmount('')
       setPrepaidMethod('')
+      setPlannedCheckoutDate('')
       onRefresh()
       fetchTodayReservations()
     } catch (error) {
@@ -914,6 +945,28 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
                           </div>
                         </div>
                       )}
+
+                      <div style={{ marginTop: '12px' }}>
+                        <label style={{ display: 'block', fontSize: '0.9rem', color: '#555', marginBottom: '6px' }}>
+                          📅 호텔링 종료 예정일 (선택)
+                        </label>
+                        <input
+                          type="date"
+                          value={plannedCheckoutDate}
+                          min={new Date().toISOString().split('T')[0]}
+                          onChange={(e) => setPlannedCheckoutDate(e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '10px',
+                            border: '1px solid #d1d5db',
+                            borderRadius: '6px',
+                            fontSize: '0.95rem'
+                          }}
+                        />
+                        <div style={{ fontSize: '0.8rem', color: '#777', marginTop: '6px' }}>
+                          예약 없이 체크인한 경우 기간 관리를 위해 자동 예약이 생성됩니다.
+                        </div>
+                      </div>
                     </div>
                   )}
 

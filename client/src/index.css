@@ -467,9 +467,7 @@ body {
 .modal-content h3 {
   color: #667eea;
   margin-bottom: 20px;
-}
-
-/* 검색 결과 스타일 */
+}/* 검색 결과 스타일 */
 .search-results {
   position: absolute;
   top: 100%;
@@ -504,9 +502,7 @@ body {
   color: #667eea;
   display: block;
   margin-bottom: 4px;
-}
-
-.search-result-item small {
+}.search-result-item small {
   color: #666;
   font-size: 0.85rem;
 }
@@ -544,10 +540,7 @@ body {
 .form-input:focus {
   outline: none;
   border-color: #667eea;
-}
-
-.form-input:disabled {
+}.form-input:disabled {
   background: #f0f0f0;
   cursor: not-allowed;
 }
-

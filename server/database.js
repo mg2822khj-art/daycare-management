@@ -46,6 +46,7 @@ try {
   // customers 테이블 체크
   const customersTableInfo = db.exec("SELECT sql FROM sqlite_master WHERE type='table' AND name='customers'");
   const visitsTableInfo = db.exec("SELECT sql FROM sqlite_master WHERE type='table' AND name='visits'");
+  const reservationsTableInfo = db.exec("SELECT sql FROM sqlite_master WHERE type='table' AND name='hoteling_reservations'");
   
   let needRecreate = false;
   
@@ -99,6 +100,41 @@ try {
       }
     }
   }
+
+  // hoteling_reservations 테이블 선결제 컬럼 확인 및 추가
+  if (reservationsTableInfo.length > 0) {
+    const createSQL = reservationsTableInfo[0].values[0][0];
+    if (createSQL && !createSQL.includes('prepaid')) {
+      console.log('⚠️ hoteling_reservations 테이블에 prepaid 컬럼이 없습니다. 추가합니다...');
+      try {
+        db.run('ALTER TABLE hoteling_reservations ADD COLUMN prepaid INTEGER DEFAULT 0');
+        saveDatabase();
+        console.log('✅ reservations.prepaid 컬럼 추가 완료');
+      } catch (e) {
+        console.log('reservations.prepaid 컬럼 추가 중 오류 (무시됨):', e.message);
+      }
+    }
+    if (createSQL && !createSQL.includes('prepaid_amount')) {
+      console.log('⚠️ hoteling_reservations 테이블에 prepaid_amount 컬럼이 없습니다. 추가합니다...');
+      try {
+        db.run('ALTER TABLE hoteling_reservations ADD COLUMN prepaid_amount REAL DEFAULT 0');
+        saveDatabase();
+        console.log('✅ reservations.prepaid_amount 컬럼 추가 완료');
+      } catch (e) {
+        console.log('reservations.prepaid_amount 컬럼 추가 중 오류 (무시됨):', e.message);
+      }
+    }
+    if (createSQL && !createSQL.includes('prepaid_payment_method')) {
+      console.log('⚠️ hoteling_reservations 테이블에 prepaid_payment_method 컬럼이 없습니다. 추가합니다...');
+      try {
+        db.run('ALTER TABLE hoteling_reservations ADD COLUMN prepaid_payment_method TEXT');
+        saveDatabase();
+        console.log('✅ reservations.prepaid_payment_method 컬럼 추가 완료');
+      } catch (e) {
+        console.log('reservations.prepaid_payment_method 컬럼 추가 중 오류 (무시됨):', e.message);
+      }
+    }
+  }
   
   if (needRecreate) {
     console.log('⚠️ 데이터베이스 스키마가 오래되었습니다. 테이블을 재생성합니다...');
@@ -144,6 +180,9 @@ db.run(`
     start_date TEXT NOT NULL,
     end_date TEXT NOT NULL,
     notes TEXT,
+    prepaid INTEGER DEFAULT 0,
+    prepaid_amount REAL DEFAULT 0,
+    prepaid_payment_method TEXT,
     status TEXT DEFAULT 'confirmed',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     deleted_at DATETIME DEFAULT NULL,
@@ -185,6 +224,9 @@ try {
     const nameIndex = columns.indexOf('name');
     const hasCustomerId = pragmaResult[0].values.some(row => row[nameIndex] === 'customer_id');
     const hasDogId = pragmaResult[0].values.some(row => row[nameIndex] === 'dog_id');
+    const hasPrepaid = pragmaResult[0].values.some(row => row[nameIndex] === 'prepaid');
+    const hasPrepaidAmount = pragmaResult[0].values.some(row => row[nameIndex] === 'prepaid_amount');
+    const hasPrepaidPaymentMethod = pragmaResult[0].values.some(row => row[nameIndex] === 'prepaid_payment_method');
 
     // 1) customer_id 컬럼이 없으면 추가
     if (!hasCustomerId) {
@@ -206,6 +248,9 @@ try {
           start_date TEXT NOT NULL,
           end_date TEXT NOT NULL,
           notes TEXT,
+          prepaid INTEGER DEFAULT 0,
+          prepaid_amount REAL DEFAULT 0,
+          prepaid_payment_method TEXT,
           status TEXT DEFAULT 'confirmed',
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           deleted_at DATETIME DEFAULT NULL,
@@ -216,7 +261,9 @@ try {
       // 기존 데이터에서 사용할 수 있는 컬럼만 복사 (dog_id는 버림)
       try {
         db.run(`
-          INSERT INTO hoteling_reservations_new (id, customer_id, start_date, end_date, notes, status, created_at, deleted_at)
+          INSERT INTO hoteling_reservations_new (
+            id, customer_id, start_date, end_date, notes, prepaid, prepaid_amount, prepaid_payment_method, status, created_at, deleted_at
+          )
           SELECT 
             id,
             -- 기존 테이블에 customer_id가 없었다면 NULL로 들어가지만,
@@ -225,6 +272,9 @@ try {
             start_date,
             end_date,
             notes,
+            0 as prepaid,
+            0 as prepaid_amount,
+            NULL as prepaid_payment_method,
             COALESCE(status, 'confirmed'),
             created_at,
             deleted_at
@@ -243,6 +293,17 @@ try {
       db.run(`CREATE INDEX IF NOT EXISTS idx_reservations_deleted ON hoteling_reservations(deleted_at);`);
 
       console.log('✅ hoteling_reservations 테이블 마이그레이션 완료 (dog_id 제거)');
+    }
+
+    // 3) 선결제 관련 컬럼이 없으면 추가
+    if (!hasPrepaid) {
+      db.run(`ALTER TABLE hoteling_reservations ADD COLUMN prepaid INTEGER DEFAULT 0;`);
+    }
+    if (!hasPrepaidAmount) {
+      db.run(`ALTER TABLE hoteling_reservations ADD COLUMN prepaid_amount REAL DEFAULT 0;`);
+    }
+    if (!hasPrepaidPaymentMethod) {
+      db.run(`ALTER TABLE hoteling_reservations ADD COLUMN prepaid_payment_method TEXT;`);
     }
   }
 } catch (e) {
@@ -1000,9 +1061,19 @@ export function restoreVisit(visit_id) {
 // ===== 호텔링 예약 관련 함수 =====
 
 // 예약 생성 (한국 시간)
-export function createReservation(customer_id, start_date, end_date, notes = '') {
-  const stmt = db.prepare("INSERT INTO hoteling_reservations (customer_id, start_date, end_date, notes) VALUES (?, ?, ?, ?)");
-  stmt.bind([customer_id, start_date, end_date, notes]);
+export function createReservation(customer_id, start_date, end_date, notes = '', prepaid = 0, prepaid_amount = 0, prepaid_payment_method = null) {
+  const stmt = db.prepare(
+    "INSERT INTO hoteling_reservations (customer_id, start_date, end_date, notes, prepaid, prepaid_amount, prepaid_payment_method) VALUES (?, ?, ?, ?, ?, ?, ?)"
+  );
+  stmt.bind([
+    customer_id,
+    start_date,
+    end_date,
+    notes,
+    prepaid ? 1 : 0,
+    prepaid ? (parseFloat(prepaid_amount) || 0) : 0,
+    prepaid ? (prepaid_payment_method || null) : null
+  ]);
   stmt.step();
   stmt.free();
   saveDatabase();
@@ -1111,9 +1182,37 @@ export function getCustomerReservations(customer_id) {
 }
 
 // 예약 수정
-export function updateReservation(reservation_id, start_date, end_date, notes, status) {
-  const stmt = db.prepare('UPDATE hoteling_reservations SET start_date = ?, end_date = ?, notes = ?, status = ? WHERE id = ?');
-  stmt.bind([start_date, end_date, notes, status, reservation_id]);
+export function updateReservation(
+  reservation_id,
+  start_date,
+  end_date,
+  notes,
+  status,
+  prepaid = 0,
+  prepaid_amount = 0,
+  prepaid_payment_method = null
+) {
+  const stmt = db.prepare(`
+    UPDATE hoteling_reservations
+    SET start_date = ?,
+        end_date = ?,
+        notes = ?,
+        status = ?,
+        prepaid = ?,
+        prepaid_amount = ?,
+        prepaid_payment_method = ?
+    WHERE id = ?
+  `);
+  stmt.bind([
+    start_date,
+    end_date,
+    notes,
+    status,
+    prepaid ? 1 : 0,
+    prepaid ? (parseFloat(prepaid_amount) || 0) : 0,
+    prepaid ? (prepaid_payment_method || null) : null,
+    reservation_id
+  ]);
   stmt.step();
   stmt.free();
   saveDatabase();
