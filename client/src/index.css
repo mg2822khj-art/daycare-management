@@ -502,9 +502,29 @@ body {
   color: #667eea;
   display: block;
   margin-bottom: 4px;
-}.search-result-item small {
+}
+
+.search-result-item small {
   color: #666;
   font-size: 0.85rem;
+}
+
+/* 호텔링 고객 자동완성 전용 스타일 */
+.hoteling-search-results {
+  position: static;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+}
+
+.hoteling-search-result-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.4;
+}
+
+.hoteling-search-result-item > div {
+  word-break: keep-all;
 }
 
 /* 폼 입력 필드 추가 스타일 */

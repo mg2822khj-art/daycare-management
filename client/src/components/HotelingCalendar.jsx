@@ -1127,7 +1127,7 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
                 />
                 
                 {Array.isArray(searchResults) && searchResults.length > 0 && (
-                  <div className="search-results" style={{
+                  <div className="search-results hoteling-search-results" style={{
                     maxHeight: '200px',
                     overflowY: 'auto',
                     border: '1px solid #ddd',
@@ -1140,7 +1140,7 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
                       return (
                         <div
                           key={customer.id || index}
-                          className="search-result-item"
+                          className="search-result-item hoteling-search-result-item"
                           onClick={() => {
                             console.log('🖱️ 검색 결과 클릭:', customer)
                             handleSelectCustomer(customer)
@@ -1151,8 +1151,8 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
                             borderBottom: index < searchResults.length - 1 ? '1px solid #eee' : 'none',
                             transition: 'background-color 0.2s'
                           }}
-                          onMouseEnter={(e) => e.target.style.backgroundColor = '#f0f0f0'}
-                          onMouseLeave={(e) => e.target.style.backgroundColor = 'white'}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0f0f0'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
                         >
                           <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
                             🐕 {customer.dog_name} ({customer.breed || '견종 없음'})
