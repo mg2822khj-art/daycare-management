@@ -811,34 +811,15 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
 
             {/* 자동완성 드롭다운 - 스크롤 가능 */}
             {showAutoComplete && autoCompleteResults.length > 0 && (
-              <div style={{
-                position: 'absolute',
-                top: '100%',
-                left: 0,
-                right: 0,
-                background: 'white',
-                border: '2px solid #667eea',
-                borderRadius: '8px',
-                marginTop: '5px',
-                maxHeight: '400px',
-                overflowY: 'auto',
-                overflowX: 'hidden',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                zIndex: 1000,
-                WebkitOverflowScrolling: 'touch' // iOS 부드러운 스크롤
-              }}>
+              <div className="autocomplete-dropdown">
                 {autoCompleteResults.map((customer) => (
                   <div
                     key={customer.id}
+                    className="autocomplete-item"
                     onClick={() => handleAutoCompleteSelect(customer)}
                     style={{
-                      padding: '15px',
                       cursor: 'pointer',
-                      borderBottom: '1px solid #e0e0e0',
                       transition: 'background 0.2s',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
                       background: 'white'
                     }}
                     onMouseEnter={(e) => {
@@ -848,7 +829,7 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
                       e.currentTarget.style.background = 'white'
                     }}
                   >
-                    <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="autocomplete-item-main">
                       <div style={{ fontWeight: '600', color: '#667eea', marginBottom: '6px', fontSize: '1rem' }}>
                         🐕 {customer.dog_name}
                       </div>
@@ -859,16 +840,13 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
                       </div>
                     </div>
                     <button
-                      className="btn btn-success"
+                      className="btn btn-success autocomplete-checkin-btn"
                       onClick={(e) => handleAutoCompleteCheckIn(customer, e)}
                       disabled={isLoading}
                       style={{
-                        minWidth: '90px',
-                        padding: '8px 12px',
+                        padding: '8px 14px',
                         fontSize: '0.8rem',
-                        marginLeft: '10px',
-                        whiteSpace: 'nowrap',
-                        flexShrink: 0
+                        whiteSpace: 'nowrap'
                       }}
                     >
                       {typeLabel} 체크인
