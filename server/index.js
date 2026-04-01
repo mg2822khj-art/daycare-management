@@ -54,6 +54,40 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
+const normalizeCheckoutDiscount = (discountRateInput, discountAmountInput) => {
+  const rate = Number(discountRateInput || 0);
+  const amount = Number(discountAmountInput || 0);
+
+  if (Number.isNaN(rate) || rate < 0 || rate > 100) {
+    throw new Error('할인율은 0~100 사이여야 합니다.');
+  }
+  if (Number.isNaN(amount) || amount < 0) {
+    throw new Error('할인금액은 0원 이상이어야 합니다.');
+  }
+  if (rate > 0 && amount > 0) {
+    throw new Error('할인율 또는 할인금액 중 하나만 입력해주세요.');
+  }
+
+  return { discount_rate: rate, discount_amount_input: amount };
+};
+
+const applyDiscountToBaseAmount = (baseAmount, discountRate, discountAmountInput) => {
+  const safeBase = Math.max(0, Number(baseAmount || 0));
+  let discountAmount = 0;
+
+  if (discountRate > 0) {
+    discountAmount = Math.round((safeBase * discountRate) / 100);
+  } else if (discountAmountInput > 0) {
+    discountAmount = Math.round(discountAmountInput);
+  }
+
+  discountAmount = Math.min(discountAmount, safeBase);
+  return {
+    discount_amount: discountAmount,
+    discounted_amount: Math.max(0, safeBase - discountAmount)
+  };
+};
+
 // 고객 등록
 app.post('/api/customers', (req, res) => {
   try {
@@ -305,11 +339,13 @@ app.put('/api/visits/:visitId/prepaid', (req, res) => {
 // 체크아웃 요금 계산 (체크아웃 전)
 app.post('/api/checkout/calculate', (req, res) => {
   try {
-    const { visit_id, checkout_time } = req.body;
+    const { visit_id, checkout_time, discount_rate, discount_amount } = req.body;
     
     if (!visit_id) {
       return res.status(400).json({ error: '방문 ID가 필요합니다.' });
     }
+
+    const discountInfo = normalizeCheckoutDiscount(discount_rate, discount_amount);
 
     // 방문 정보 조회
     const visit = getVisitById(visit_id);
@@ -338,10 +374,22 @@ app.post('/api/checkout/calculate', (req, res) => {
     // 데이케어 요금 계산
     if (visit.visit_type === 'daycare') {
       const feeInfo = calculateDaycareFee(visit.weight, duration_minutes);
+      const discounted = applyDiscountToBaseAmount(
+        feeInfo.fee || 0,
+        discountInfo.discount_rate,
+        discountInfo.discount_amount_input
+      );
       return res.json({
         success: true,
         visit_type: 'daycare',
-        fee_info: feeInfo,
+        fee_info: {
+          ...feeInfo,
+          original_fee: feeInfo.fee || 0,
+          fee: discounted.discounted_amount,
+          discount_rate: discountInfo.discount_rate,
+          discount_amount_input: discountInfo.discount_amount_input,
+          discount_amount: discounted.discount_amount
+        },
         duration_minutes,
         check_in: visit.check_in,
         checkout_time: checkout_time || null,
@@ -353,10 +401,25 @@ app.post('/api/checkout/calculate', (req, res) => {
     } else {
       // 호텔링 요금 계산
       const feeInfo = calculateHotelingFee(visit.weight, duration_minutes, visit.prepaid_amount || 0);
+      const discounted = applyDiscountToBaseAmount(
+        feeInfo.total_fee || 0,
+        discountInfo.discount_rate,
+        discountInfo.discount_amount_input
+      );
+      const prepaidAmount = Number(visit.prepaid_amount || 0);
+      const discountedRemainingFee = Math.max(0, discounted.discounted_amount - prepaidAmount);
       return res.json({
         success: true,
         visit_type: 'hoteling',
-        fee_info: feeInfo,
+        fee_info: {
+          ...feeInfo,
+          original_total_fee: feeInfo.total_fee || 0,
+          total_fee: discounted.discounted_amount,
+          remaining_fee: discountedRemainingFee,
+          discount_rate: discountInfo.discount_rate,
+          discount_amount_input: discountInfo.discount_amount_input,
+          discount_amount: discounted.discount_amount
+        },
         duration_minutes,
         check_in: visit.check_in,
         checkout_time: checkout_time || null,
@@ -368,6 +431,9 @@ app.post('/api/checkout/calculate', (req, res) => {
     }
   } catch (error) {
     console.error(error);
+    if (error.message && error.message.includes('할인')) {
+      return res.status(400).json({ error: error.message });
+    }
     res.status(500).json({ error: '요금 계산 중 오류가 발생했습니다.' });
   }
 });
@@ -375,7 +441,7 @@ app.post('/api/checkout/calculate', (req, res) => {
 // 체크아웃 (요금 + 매출 자동 반영)
 app.post('/api/checkout', (req, res) => {
   try {
-    const { visit_id, checkout_time, payment_method } = req.body;
+    const { visit_id, checkout_time, payment_method, discount_rate, discount_amount } = req.body;
     
     if (!visit_id) {
       return res.status(400).json({ error: '방문 ID가 필요합니다.' });
@@ -385,6 +451,8 @@ app.post('/api/checkout', (req, res) => {
     if (!payment_method || !validMethods.includes(payment_method)) {
       return res.status(400).json({ error: '결제 수단을 선택해주세요. (카드/현금/계좌이체)' });
     }
+
+    const discountInfo = normalizeCheckoutDiscount(discount_rate, discount_amount);
 
     // 방문 정보 조회
     const visit = getVisitById(visit_id);
@@ -414,19 +482,32 @@ app.post('/api/checkout', (req, res) => {
 
       if (visit.visit_type === 'daycare') {
         const feeInfo = calculateDaycareFee(visit.weight, duration_minutes);
-        amount = feeInfo?.fee || 0;
+        const discounted = applyDiscountToBaseAmount(
+          feeInfo?.fee || 0,
+          discountInfo.discount_rate,
+          discountInfo.discount_amount_input
+        );
+        amount = discounted.discounted_amount;
       } else if (visit.visit_type === 'hoteling') {
         const feeInfo = calculateHotelingFee(visit.weight, duration_minutes, visit.prepaid_amount || 0);
         if (feeInfo) {
-          if (visit.prepaid && (visit.prepaid_amount || 0) > 0) {
-            amount = feeInfo.remaining_fee || 0;
-          } else {
-            amount = feeInfo.total_fee || 0;
-          }
+          const discounted = applyDiscountToBaseAmount(
+            feeInfo.total_fee || 0,
+            discountInfo.discount_rate,
+            discountInfo.discount_amount_input
+          );
+          const prepaidAmount = Number(visit.prepaid_amount || 0);
+          amount = Math.max(0, discounted.discounted_amount - prepaidAmount);
         }
       }
 
       if (amount > 0) {
+        const discountNote =
+          discountInfo.discount_rate > 0
+            ? ` (할인율 ${discountInfo.discount_rate}%)`
+            : discountInfo.discount_amount_input > 0
+              ? ` (할인 ${Math.round(discountInfo.discount_amount_input).toLocaleString()}원)`
+              : '';
         createRevenue(
           visit.customer_id,
           null,
@@ -434,7 +515,7 @@ app.post('/api/checkout', (req, res) => {
           payment_method,
           amount,
           1,
-          `${serviceLabel} 체크아웃 자동 매출`
+          `${serviceLabel} 체크아웃 자동 매출${discountNote}`
         );
       }
     } catch (revErr) {
@@ -455,6 +536,9 @@ app.post('/api/checkout', (req, res) => {
     });
   } catch (error) {
     console.error(error);
+    if (error.message && error.message.includes('할인')) {
+      return res.status(400).json({ error: error.message });
+    }
     res.status(500).json({ error: '체크아웃 중 오류가 발생했습니다.' });
   }
 });

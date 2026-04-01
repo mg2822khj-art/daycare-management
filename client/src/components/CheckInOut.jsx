@@ -26,6 +26,8 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
   const [prepaidMethod, setPrepaidMethod] = useState('')
   const [plannedCheckoutDate, setPlannedCheckoutDate] = useState('')
   const [checkoutPaymentMethod, setCheckoutPaymentMethod] = useState('')
+  const [checkoutDiscountRate, setCheckoutDiscountRate] = useState('')
+  const [checkoutDiscountAmount, setCheckoutDiscountAmount] = useState('')
   const [todayReservations, setTodayReservations] = useState([])
   const [showCheckInModal, setShowCheckInModal] = useState(false)
   const [selectedReservation, setSelectedReservation] = useState(null)
@@ -406,6 +408,8 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
         setCheckoutConfirm(visit)
         setFeeInfo(response.data.fee_info)
         setCheckoutPaymentMethod('')
+        setCheckoutDiscountRate('')
+        setCheckoutDiscountAmount('')
         
         // 현재 시간을 체크아웃 시간 기본값으로 설정
         const now = new Date()
@@ -448,6 +452,8 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
         const checkoutTimeStr = `${datePart} ${timePart}:00`
         checkoutData.checkout_time = checkoutTimeStr
       }
+      checkoutData.discount_rate = Number(checkoutDiscountRate || 0)
+      checkoutData.discount_amount = Number(checkoutDiscountAmount || 0)
       
       const response = await axios.post(`${API_URL}/checkout`, checkoutData)
 
@@ -474,11 +480,13 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
     setFeeInfo(null)
     setEditCheckOutTime('')
     setCheckoutPaymentMethod('')
+    setCheckoutDiscountRate('')
+    setCheckoutDiscountAmount('')
     setIsLoading(false)
   }
 
   // 체크아웃 시간 수정 시 요금 재계산
-  const handleCheckOutTimeChange = async (newTime) => {
+  const handleCheckOutTimeChange = async (newTime, overrideDiscountRate = null, overrideDiscountAmount = null) => {
     setEditCheckOutTime(newTime)
     
     if (!checkoutConfirm || !newTime) return
@@ -488,10 +496,19 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
       const [datePart, timePart] = newTime.split('T')
       const checkoutTimeStr = `${datePart} ${timePart}:00`
       
+      const discountRate = overrideDiscountRate !== null
+        ? Number(overrideDiscountRate || 0)
+        : Number(checkoutDiscountRate || 0)
+      const discountAmount = overrideDiscountAmount !== null
+        ? Number(overrideDiscountAmount || 0)
+        : Number(checkoutDiscountAmount || 0)
+
       // 요금 재계산
       const response = await axios.post(`${API_URL}/checkout/calculate`, {
         visit_id: checkoutConfirm.id,
-        checkout_time: checkoutTimeStr
+        checkout_time: checkoutTimeStr,
+        discount_rate: discountRate,
+        discount_amount: discountAmount
       })
       
       if (response.data.success && response.data.fee_info) {
@@ -499,6 +516,28 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
       }
     } catch (error) {
       console.error('요금 재계산 실패:', error)
+    }
+  }
+
+  const handleCheckoutDiscountRateChange = (value) => {
+    setCheckoutDiscountRate(value)
+    if (value) {
+      setCheckoutDiscountAmount('')
+    }
+
+    if (checkoutConfirm && editCheckOutTime) {
+      handleCheckOutTimeChange(editCheckOutTime, value, value ? 0 : checkoutDiscountAmount)
+    }
+  }
+
+  const handleCheckoutDiscountAmountChange = (value) => {
+    setCheckoutDiscountAmount(value)
+    if (value) {
+      setCheckoutDiscountRate('')
+    }
+
+    if (checkoutConfirm && editCheckOutTime) {
+      handleCheckOutTimeChange(editCheckOutTime, value ? 0 : checkoutDiscountRate, value)
     }
   }
 
@@ -1305,10 +1344,25 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
               {visitType === 'daycare' && feeInfo.fee > 0 && (
                 <div style={{ padding: '20px', background: '#e8f5e9', borderRadius: '8px', marginBottom: '15px' }}>
                   <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '8px' }}>
-                    요금 계산
+                    결제 금액 요약
                   </div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: '600', color: '#2e7d32', marginBottom: '10px' }}>
-                    {feeInfo.fee.toLocaleString()}원
+                  <div style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.8' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>기본 요금</span>
+                      <span>{Number(feeInfo.original_fee ?? feeInfo.fee ?? 0).toLocaleString()}원</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: feeInfo.discount_amount > 0 ? '#ef6c00' : '#94a3b8' }}>
+                      <span>할인</span>
+                      <span>- {Number(feeInfo.discount_amount || 0).toLocaleString()}원</span>
+                    </div>
+                  </div>
+                  <div style={{ borderTop: '2px solid #2e7d32', marginTop: '10px', paddingTop: '10px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '1rem', fontWeight: '700', color: '#2e7d32' }}>최종 결제 금액</span>
+                      <span style={{ fontSize: '1.35rem', fontWeight: '700', color: '#2e7d32' }}>
+                        {feeInfo.fee.toLocaleString()}원
+                      </span>
+                    </div>
                   </div>
                   <div style={{ fontSize: '0.85rem', color: '#666', lineHeight: '1.6' }}>
                     {feeInfo.fullHours > 0 && (
@@ -1331,7 +1385,7 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
                   {/* 요금 계산 상세 */}
                   <div style={{ padding: '20px', background: '#e7f3ff', borderRadius: '8px', marginBottom: '15px' }}>
                     <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '12px' }}>
-                      요금 계산 내역
+                      요금 계산 내역 (할인 전)
                     </div>
                     <div style={{ fontSize: '0.85rem', color: '#666', lineHeight: '1.8' }}>
                       {feeInfo.full_days > 0 && (
@@ -1351,7 +1405,7 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
                           </div>
                         </div>
                       )}
-                      <div style={{ 
+                      <div style={{
                         borderTop: '1px solid #ddd', 
                         marginTop: '10px', 
                         paddingTop: '10px',
@@ -1359,8 +1413,10 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
                         justifyContent: 'space-between',
                         fontSize: '0.95rem'
                       }}>
-                        <span style={{ fontWeight: '600' }}>총 요금</span>
-                        <span style={{ fontWeight: '600', color: '#1976d2' }}>{feeInfo.total_fee.toLocaleString()}원</span>
+                        <span style={{ fontWeight: '600' }}>기본 요금</span>
+                        <span style={{ fontWeight: '600', color: '#1976d2' }}>
+                          {Number(feeInfo.original_total_fee ?? feeInfo.total_fee ?? 0).toLocaleString()}원
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -1373,7 +1429,15 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
                       </div>
                       <div style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.8' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                          <span>총 요금</span>
+                          <span>기본 요금</span>
+                          <span>{Number(feeInfo.original_total_fee ?? feeInfo.total_fee ?? 0).toLocaleString()}원</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px', color: feeInfo.discount_amount > 0 ? '#ef6c00' : '#94a3b8' }}>
+                          <span>할인</span>
+                          <span>- {Number(feeInfo.discount_amount || 0).toLocaleString()}원</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                          <span>할인 적용 요금</span>
                           <span>{feeInfo.total_fee.toLocaleString()}원</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', color: '#f57c00' }}>
@@ -1398,16 +1462,97 @@ function CheckInOut({ visitType = 'daycare', currentVisits, onRefresh, refreshTr
                     </div>
                   ) : (
                     <div style={{ padding: '20px', background: '#e8f5e9', borderRadius: '8px' }}>
-                      <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '8px' }}>
-                        최종 결제 금액
+                      <div style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.8', marginBottom: '8px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span>기본 요금</span>
+                          <span>{Number(feeInfo.original_total_fee ?? feeInfo.total_fee ?? 0).toLocaleString()}원</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: feeInfo.discount_amount > 0 ? '#ef6c00' : '#94a3b8' }}>
+                          <span>할인</span>
+                          <span>- {Number(feeInfo.discount_amount || 0).toLocaleString()}원</span>
+                        </div>
                       </div>
-                      <div style={{ fontSize: '1.3rem', fontWeight: '700', color: '#2e7d32' }}>
-                        {feeInfo.total_fee.toLocaleString()}원
+                      <div style={{ borderTop: '2px solid #2e7d32', marginTop: '10px', paddingTop: '10px' }}>
+                        <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '6px' }}>
+                          최종 결제 금액
+                        </div>
+                        <div style={{ fontSize: '1.3rem', fontWeight: '700', color: '#2e7d32' }}>
+                          {feeInfo.total_fee.toLocaleString()}원
+                        </div>
                       </div>
                     </div>
                   )}
                 </div>
               )}
+
+              {/* 체크아웃 할인 입력 */}
+              <div style={{ marginTop: '15px', padding: '15px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '0.95rem', fontWeight: '600', marginBottom: '10px', color: '#334155' }}>
+                  할인 입력 (할인율 또는 할인금액)
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      value={checkoutDiscountRate}
+                      onChange={(e) => handleCheckoutDiscountRateChange(e.target.value)}
+                      placeholder="할인율"
+                      style={{
+                        width: '100%',
+                        padding: '10px 30px 10px 10px',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: '6px',
+                        fontSize: '0.95rem'
+                      }}
+                    />
+                    <span style={{
+                      position: 'absolute',
+                      right: '10px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      color: '#64748b',
+                      fontSize: '0.9rem',
+                      pointerEvents: 'none'
+                    }}>
+                      %
+                    </span>
+                  </div>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type="number"
+                      min="0"
+                      step="100"
+                      value={checkoutDiscountAmount}
+                      onChange={(e) => handleCheckoutDiscountAmountChange(e.target.value)}
+                      placeholder="할인금액"
+                      style={{
+                        width: '100%',
+                        padding: '10px 36px 10px 10px',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: '6px',
+                        fontSize: '0.95rem'
+                      }}
+                    />
+                    <span style={{
+                      position: 'absolute',
+                      right: '10px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      color: '#64748b',
+                      fontSize: '0.9rem',
+                      pointerEvents: 'none'
+                    }}>
+                      원
+                    </span>
+                  </div>
+                </div>
+                <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '8px' }}>
+                  둘 중 하나만 입력 가능하며 입력 시 요금이 자동 재계산됩니다.
+                </div>
+              </div>
 
               {/* 체크아웃 결제 수단 선택 */}
               <div style={{ marginTop: '20px', paddingTop: '15px', borderTop: '1px solid #e0e0e0' }}>

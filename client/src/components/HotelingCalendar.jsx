@@ -31,6 +31,9 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
   const [editPrepaid, setEditPrepaid] = useState(false)
   const [editPrepaidAmount, setEditPrepaidAmount] = useState('')
   const [editCheckOutTime, setEditCheckOutTime] = useState('')
+  const [checkoutPaymentMethod, setCheckoutPaymentMethod] = useState('')
+  const [checkoutDiscountRate, setCheckoutDiscountRate] = useState('')
+  const [checkoutDiscountAmount, setCheckoutDiscountAmount] = useState('')
   const [showPlannedCheckoutModal, setShowPlannedCheckoutModal] = useState(false)
   const [planningVisit, setPlanningVisit] = useState(null)
   const [plannedCheckoutInput, setPlannedCheckoutInput] = useState('')
@@ -568,6 +571,9 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
         const visit = currentVisits.find(v => v.id === visitId)
         setCheckoutConfirm({ ...visit, ...reservation })
         setFeeInfo(response.data.fee_info)
+        setCheckoutPaymentMethod('')
+        setCheckoutDiscountRate('')
+        setCheckoutDiscountAmount('')
         
         // 현재 시간을 체크아웃 시간 기본값으로 설정
         const now = new Date()
@@ -590,9 +596,19 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
 
   // 체크아웃 확정
   const confirmCheckout = async (visit_id) => {
+    if (!checkoutPaymentMethod) {
+      alert('결제 수단을 선택해주세요.')
+      return
+    }
+
     try {
       // 수정된 체크아웃 시간을 서버에 전달
-      const checkoutData = { visit_id }
+      const checkoutData = {
+        visit_id,
+        payment_method: checkoutPaymentMethod,
+        discount_rate: Number(checkoutDiscountRate || 0),
+        discount_amount: Number(checkoutDiscountAmount || 0)
+      }
       
       if (editCheckOutTime) {
         // datetime-local 형식을 YYYY-MM-DD HH:MM:SS 형식으로 변환
@@ -621,10 +637,13 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
     setCheckoutConfirm(null)
     setFeeInfo(null)
     setEditCheckOutTime('')
+    setCheckoutPaymentMethod('')
+    setCheckoutDiscountRate('')
+    setCheckoutDiscountAmount('')
   }
 
   // 체크아웃 시간 수정 시 요금 재계산
-  const handleCheckOutTimeChange = async (newTime) => {
+  const handleCheckOutTimeChange = async (newTime, overrideDiscountRate = null, overrideDiscountAmount = null) => {
     setEditCheckOutTime(newTime)
     
     if (!checkoutConfirm || !newTime) return
@@ -637,10 +656,19 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
       const visitId = getVisitId(checkoutConfirm.customer_id)
       if (!visitId) return
       
+      const discountRate = overrideDiscountRate !== null
+        ? Number(overrideDiscountRate || 0)
+        : Number(checkoutDiscountRate || 0)
+      const discountAmount = overrideDiscountAmount !== null
+        ? Number(overrideDiscountAmount || 0)
+        : Number(checkoutDiscountAmount || 0)
+
       // 요금 재계산
       const response = await axios.post(`${API_URL}/checkout/calculate`, {
         visit_id: visitId,
-        checkout_time: checkoutTimeStr
+        checkout_time: checkoutTimeStr,
+        discount_rate: discountRate,
+        discount_amount: discountAmount
       })
       
       if (response.data.success && response.data.fee_info) {
@@ -648,6 +676,28 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
       }
     } catch (error) {
       console.error('요금 재계산 실패:', error)
+    }
+  }
+
+  const handleCheckoutDiscountRateChange = (value) => {
+    setCheckoutDiscountRate(value)
+    if (value) {
+      setCheckoutDiscountAmount('')
+    }
+
+    if (checkoutConfirm && editCheckOutTime) {
+      handleCheckOutTimeChange(editCheckOutTime, value, value ? 0 : checkoutDiscountAmount)
+    }
+  }
+
+  const handleCheckoutDiscountAmountChange = (value) => {
+    setCheckoutDiscountAmount(value)
+    if (value) {
+      setCheckoutDiscountRate('')
+    }
+
+    if (checkoutConfirm && editCheckOutTime) {
+      handleCheckOutTimeChange(editCheckOutTime, value ? 0 : checkoutDiscountRate, value)
     }
   }
 
@@ -1744,7 +1794,7 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
                   {/* 요금 계산 상세 */}
                   <div style={{ padding: '20px', background: '#e7f3ff', borderRadius: '8px', marginBottom: '15px' }}>
                     <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '12px' }}>
-                      요금 계산 내역
+                      요금 계산 내역 (할인 전)
                     </div>
                     <div style={{ fontSize: '0.85rem', color: '#666', lineHeight: '1.8' }}>
                       {feeInfo.full_days > 0 && (
@@ -1772,9 +1822,17 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
                         justifyContent: 'space-between',
                         fontSize: '0.95rem'
                       }}>
-                        <span style={{ fontWeight: '600' }}>총 요금</span>
-                        <span style={{ fontWeight: '600', color: '#1976d2' }}>{feeInfo.total_fee.toLocaleString()}원</span>
+                        <span style={{ fontWeight: '600' }}>기본 요금</span>
+                        <span style={{ fontWeight: '600', color: '#1976d2' }}>
+                          {Number(feeInfo.original_total_fee ?? feeInfo.total_fee ?? 0).toLocaleString()}원
+                        </span>
                       </div>
+                      {feeInfo.discount_amount > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#ef6c00', marginTop: '6px' }}>
+                          <span>할인</span>
+                          <span>- {Number(feeInfo.discount_amount || 0).toLocaleString()}원</span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -1786,7 +1844,15 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
                       </div>
                       <div style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.8' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                          <span>총 요금</span>
+                          <span>기본 요금</span>
+                          <span>{Number(feeInfo.original_total_fee ?? feeInfo.total_fee ?? 0).toLocaleString()}원</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px', color: feeInfo.discount_amount > 0 ? '#ef6c00' : '#94a3b8' }}>
+                          <span>할인</span>
+                          <span>- {Number(feeInfo.discount_amount || 0).toLocaleString()}원</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                          <span>할인 적용 요금</span>
                           <span>{feeInfo.total_fee.toLocaleString()}원</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', color: '#f57c00' }}>
@@ -1811,11 +1877,23 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
                     </div>
                   ) : (
                     <div style={{ padding: '20px', background: '#e8f5e9', borderRadius: '8px' }}>
-                      <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '8px' }}>
-                        최종 결제 금액
+                      <div style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.8', marginBottom: '8px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span>기본 요금</span>
+                          <span>{Number(feeInfo.original_total_fee ?? feeInfo.total_fee ?? 0).toLocaleString()}원</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: feeInfo.discount_amount > 0 ? '#ef6c00' : '#94a3b8' }}>
+                          <span>할인</span>
+                          <span>- {Number(feeInfo.discount_amount || 0).toLocaleString()}원</span>
+                        </div>
                       </div>
-                      <div style={{ fontSize: '1.3rem', fontWeight: '700', color: '#2e7d32' }}>
-                        {feeInfo.total_fee.toLocaleString()}원
+                      <div style={{ borderTop: '2px solid #2e7d32', marginTop: '10px', paddingTop: '10px' }}>
+                        <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '8px' }}>
+                          최종 결제 금액
+                        </div>
+                        <div style={{ fontSize: '1.3rem', fontWeight: '700', color: '#2e7d32' }}>
+                          {feeInfo.total_fee.toLocaleString()}원
+                        </div>
                       </div>
                     </div>
                   )}
@@ -1829,6 +1907,98 @@ function HotelingCalendar({ onRefresh, refreshTrigger }) {
                   </div>
                 </div>
               )}
+
+              <div style={{ marginTop: '15px', padding: '15px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '0.95rem', fontWeight: '600', marginBottom: '10px', color: '#334155' }}>
+                  할인 입력 (할인율 또는 할인금액)
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      value={checkoutDiscountRate}
+                      onChange={(e) => handleCheckoutDiscountRateChange(e.target.value)}
+                      placeholder="할인율"
+                      className="form-input"
+                      style={{ paddingRight: '30px' }}
+                    />
+                    <span style={{
+                      position: 'absolute',
+                      right: '10px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      color: '#64748b',
+                      fontSize: '0.9rem',
+                      pointerEvents: 'none'
+                    }}>
+                      %
+                    </span>
+                  </div>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type="number"
+                      min="0"
+                      step="100"
+                      value={checkoutDiscountAmount}
+                      onChange={(e) => handleCheckoutDiscountAmountChange(e.target.value)}
+                      placeholder="할인금액"
+                      className="form-input"
+                      style={{ paddingRight: '36px' }}
+                    />
+                    <span style={{
+                      position: 'absolute',
+                      right: '10px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      color: '#64748b',
+                      fontSize: '0.9rem',
+                      pointerEvents: 'none'
+                    }}>
+                      원
+                    </span>
+                  </div>
+                </div>
+                <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '8px' }}>
+                  둘 중 하나만 입력 가능하며 입력 시 요금이 자동 재계산됩니다.
+                </div>
+              </div>
+
+              <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #e0e0e0' }}>
+                <div style={{ fontSize: '0.95rem', fontWeight: '600', marginBottom: '8px', color: '#333' }}>
+                  결제 수단 선택
+                </div>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  {['카드', '현금', '계좌이체'].map((method) => (
+                    <label
+                      key={method}
+                      style={{
+                        flex: '1',
+                        minWidth: '90px',
+                        padding: '10px',
+                        border: `2px solid ${checkoutPaymentMethod === method ? '#667eea' : '#e0e0e0'}`,
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        textAlign: 'center',
+                        background: checkoutPaymentMethod === method ? '#f0f4ff' : 'white',
+                        fontSize: '0.9rem'
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="calendar_checkout_payment_method"
+                        value={method}
+                        checked={checkoutPaymentMethod === method}
+                        onChange={(e) => setCheckoutPaymentMethod(e.target.value)}
+                        style={{ marginRight: '6px' }}
+                      />
+                      {method}
+                    </label>
+                  ))}
+                </div>
+              </div>
             </div>
             <div style={{ display: 'flex', gap: '10px' }}>
               <button
