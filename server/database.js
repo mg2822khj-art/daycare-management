@@ -1476,12 +1476,30 @@ export function getTransportDefaults() {
   try {
     const vehicles = db.exec(`SELECT DISTINCT vehicle_number FROM transport_logs ORDER BY rowid DESC LIMIT 10`);
     const drivers = db.exec(`SELECT DISTINCT driver_name FROM transport_logs ORDER BY rowid DESC LIMIT 10`);
+
+    // 최근 30건의 운송일지에서 탑승 강아지 순서 추출 (최근에 탄 순서대로)
+    const recentLogs = db.exec(`SELECT dogs_info FROM transport_logs ORDER BY rowid DESC LIMIT 30`);
+    const recentDogKeys = [];
+    if (recentLogs.length) {
+      for (const row of recentLogs[0].values) {
+        try {
+          const dogs = JSON.parse(row[0] || '[]');
+          for (const d of dogs) {
+            if (d.key && !recentDogKeys.includes(d.key)) {
+              recentDogKeys.push(d.key);
+            }
+          }
+        } catch { /* 무시 */ }
+      }
+    }
+
     return {
       vehicle_numbers: vehicles.length ? vehicles[0].values.map(r => r[0]) : [],
       driver_names: drivers.length ? drivers[0].values.map(r => r[0]) : [],
+      recent_dog_keys: recentDogKeys,
     };
   } catch {
-    return { vehicle_numbers: [], driver_names: [] };
+    return { vehicle_numbers: [], driver_names: [], recent_dog_keys: [] };
   }
 }
 

@@ -14,6 +14,7 @@ function TransportLogTab({ customers }) {
   const [filterEnd, setFilterEnd] = useState(TODAY)
   const [savedVehicles, setSavedVehicles] = useState([])
   const [savedDrivers, setSavedDrivers] = useState([])
+  const [recentDogKeys, setRecentDogKeys] = useState([])
 
   // 폼 상태
   const emptyForm = {
@@ -34,6 +35,7 @@ function TransportLogTab({ customers }) {
       const res = await axios.get(`${API_URL}/transport-logs/defaults`)
       setSavedVehicles(res.data.vehicle_numbers || [])
       setSavedDrivers(res.data.driver_names || [])
+      setRecentDogKeys(res.data.recent_dog_keys || [])
     } catch {
       // 무시
     }
@@ -139,13 +141,24 @@ function TransportLogTab({ customers }) {
     }
   }
 
-  const filteredCustomers = customers.filter(c =>
-    !dogSearch ||
-    c.dog_name?.includes(dogSearch) ||
-    c.customer_name?.includes(dogSearch)
-  )
+  const filteredCustomers = customers
+    .filter(c =>
+      !dogSearch ||
+      c.dog_name?.includes(dogSearch) ||
+      c.customer_name?.includes(dogSearch)
+    )
+    .sort((a, b) => {
+      const keyA = `${a.customer_id || a.id}_${a.dog_name}`
+      const keyB = `${b.customer_id || b.id}_${b.dog_name}`
+      const idxA = recentDogKeys.indexOf(keyA)
+      const idxB = recentDogKeys.indexOf(keyB)
+      if (idxA === -1 && idxB === -1) return 0
+      if (idxA === -1) return 1
+      if (idxB === -1) return -1
+      return idxA - idxB
+    })
 
-  const routeLabel = (type) => type === 'pickup' ? '🚐 픽업' : '🏠 드랍'
+  const routeLabel = (type) => type === 'pickup' ? '🚐 픽업 (가정→유치원)' : '🏠 드랍 (유치원→가정)'
 
   return (
     <div>
@@ -179,8 +192,8 @@ function TransportLogTab({ customers }) {
                 value={form.route_type}
                 onChange={e => setForm(p => ({ ...p, route_type: e.target.value }))}
               >
-                <option value="pickup">픽업 (유치원→가정)</option>
-                <option value="dropoff">드랍 (가정→유치원)</option>
+                <option value="pickup">픽업 (가정→유치원)</option>
+                <option value="dropoff">드랍 (유치원→가정)</option>
               </select>
             </div>
             <div className="form-group">
@@ -305,6 +318,7 @@ function TransportLogTab({ customers }) {
                   filteredCustomers.map(c => {
                     const key = `${c.customer_id || c.id}_${c.dog_name}`
                     const selected = form.selected_dogs.some(d => d.key === key)
+                    const isRecent = recentDogKeys.includes(key)
                     return (
                       <div
                         key={key}
@@ -327,6 +341,18 @@ function TransportLogTab({ customers }) {
                           <span style={{ color: '#666', fontSize: '0.85rem', marginLeft: 8 }}>
                             ({c.customer_name} · {c.breed})
                           </span>
+                          {isRecent && (
+                            <span style={{
+                              marginLeft: 8,
+                              fontSize: '0.72rem',
+                              background: '#fff3cd',
+                              color: '#856404',
+                              border: '1px solid #ffc107',
+                              borderRadius: 10,
+                              padding: '1px 7px',
+                              fontWeight: 600,
+                            }}>최근 탑승</span>
+                          )}
                         </div>
                         {selected && <span style={{ color: '#667eea', fontWeight: 700 }}>✓</span>}
                       </div>
