@@ -7,6 +7,7 @@ import VisitHistory from './components/VisitHistory'
 import TrashBin from './components/TrashBin'
 import HotelingCalendar from './components/HotelingCalendar'
 import Revenue from './components/Revenue'
+import TransportLog from './components/TransportLog'
 
 const API_URL = '/api' // 상대 경로 사용 (모바일 지원)
 
@@ -151,6 +152,12 @@ function App() {
         >
           💰 매출
         </button>
+        <button
+          className={`tab-button ${activeTab === 'transport' ? 'active' : ''}`}
+          onClick={() => setActiveTab('transport')}
+        >
+          🚐 운송·소독일지
+        </button>
       </div>
 
       <div className="content">
@@ -197,6 +204,10 @@ function App() {
 
         {activeTab === 'revenue' && (
           <Revenue />
+        )}
+
+        {activeTab === 'transport' && (
+          <TransportLog customers={customers} />
         )}
       </div>
     </div>

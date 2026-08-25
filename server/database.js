@@ -216,6 +216,34 @@ db.run(`
   CREATE INDEX IF NOT EXISTS idx_revenues_deleted ON revenues(deleted_at);
 `);
 
+// 운송일지 테이블 생성
+db.run(`
+  CREATE TABLE IF NOT EXISTS transport_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    log_date TEXT NOT NULL,
+    vehicle_number TEXT NOT NULL,
+    driver_name TEXT NOT NULL,
+    route_type TEXT NOT NULL DEFAULT 'pickup',
+    dogs_info TEXT NOT NULL DEFAULT '[]',
+    notes TEXT,
+    created_at DATETIME DEFAULT (datetime('now', '+9 hours'))
+  );
+
+  CREATE TABLE IF NOT EXISTS disinfection_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    log_date TEXT NOT NULL,
+    disinfection_area TEXT NOT NULL,
+    disinfectant TEXT NOT NULL,
+    method TEXT NOT NULL,
+    manager TEXT NOT NULL,
+    notes TEXT,
+    created_at DATETIME DEFAULT (datetime('now', '+9 hours'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_transport_date ON transport_logs(log_date);
+  CREATE INDEX IF NOT EXISTS idx_disinfection_date ON disinfection_logs(log_date);
+`);
+
 // 기존 DB 호환성: hoteling_reservations 테이블 스키마 보정
 try {
   const pragmaResult = db.exec(`PRAGMA table_info(hoteling_reservations);`);
@@ -1387,6 +1415,128 @@ export function getReservationById(reservation_id) {
     console.error('예약 조회 오류:', error);
     return null;
   }
+}
+
+// ─── 운송일지 CRUD ────────────────────────────────────────────────────────────
+
+export function createTransportLog({ log_date, vehicle_number, driver_name, route_type, dogs_info, notes }) {
+  const stmt = db.prepare(`
+    INSERT INTO transport_logs (log_date, vehicle_number, driver_name, route_type, dogs_info, notes)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  stmt.bind([log_date, vehicle_number, driver_name, route_type, JSON.stringify(dogs_info || []), notes || '']);
+  stmt.step();
+  stmt.free();
+  saveDatabase();
+  const lastId = db.exec('SELECT last_insert_rowid() as id')[0]?.values[0][0];
+  return lastId;
+}
+
+export function getAllTransportLogs({ start_date, end_date } = {}) {
+  try {
+    let query = 'SELECT * FROM transport_logs';
+    const params = [];
+    if (start_date && end_date) {
+      query += ' WHERE log_date BETWEEN ? AND ?';
+      params.push(start_date, end_date);
+    } else if (start_date) {
+      query += ' WHERE log_date >= ?';
+      params.push(start_date);
+    }
+    query += ' ORDER BY log_date DESC, created_at DESC';
+    const stmt = db.prepare(query);
+    if (params.length) stmt.bind(params);
+    const results = [];
+    while (stmt.step()) {
+      const row = stmt.getAsObject();
+      try { row.dogs_info = JSON.parse(row.dogs_info); } catch { row.dogs_info = []; }
+      results.push(row);
+    }
+    stmt.free();
+    return results;
+  } catch (error) {
+    console.error('운송일지 조회 오류:', error);
+    return [];
+  }
+}
+
+export function updateTransportLog(id, { log_date, vehicle_number, driver_name, route_type, dogs_info, notes }) {
+  const stmt = db.prepare(`
+    UPDATE transport_logs
+    SET log_date = ?, vehicle_number = ?, driver_name = ?, route_type = ?, dogs_info = ?, notes = ?
+    WHERE id = ?
+  `);
+  stmt.bind([log_date, vehicle_number, driver_name, route_type, JSON.stringify(dogs_info || []), notes || '', id]);
+  stmt.step();
+  stmt.free();
+  saveDatabase();
+}
+
+export function deleteTransportLog(id) {
+  const stmt = db.prepare('DELETE FROM transport_logs WHERE id = ?');
+  stmt.bind([id]);
+  stmt.step();
+  stmt.free();
+  saveDatabase();
+}
+
+// ─── 소독일지 CRUD ────────────────────────────────────────────────────────────
+
+export function createDisinfectionLog({ log_date, disinfection_area, disinfectant, method, manager, notes }) {
+  const stmt = db.prepare(`
+    INSERT INTO disinfection_logs (log_date, disinfection_area, disinfectant, method, manager, notes)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  stmt.bind([log_date, disinfection_area, disinfectant, method, manager, notes || '']);
+  stmt.step();
+  stmt.free();
+  saveDatabase();
+  const lastId = db.exec('SELECT last_insert_rowid() as id')[0]?.values[0][0];
+  return lastId;
+}
+
+export function getAllDisinfectionLogs({ start_date, end_date } = {}) {
+  try {
+    let query = 'SELECT * FROM disinfection_logs';
+    const params = [];
+    if (start_date && end_date) {
+      query += ' WHERE log_date BETWEEN ? AND ?';
+      params.push(start_date, end_date);
+    } else if (start_date) {
+      query += ' WHERE log_date >= ?';
+      params.push(start_date);
+    }
+    query += ' ORDER BY log_date DESC, created_at DESC';
+    const stmt = db.prepare(query);
+    if (params.length) stmt.bind(params);
+    const results = [];
+    while (stmt.step()) results.push(stmt.getAsObject());
+    stmt.free();
+    return results;
+  } catch (error) {
+    console.error('소독일지 조회 오류:', error);
+    return [];
+  }
+}
+
+export function updateDisinfectionLog(id, { log_date, disinfection_area, disinfectant, method, manager, notes }) {
+  const stmt = db.prepare(`
+    UPDATE disinfection_logs
+    SET log_date = ?, disinfection_area = ?, disinfectant = ?, method = ?, manager = ?, notes = ?
+    WHERE id = ?
+  `);
+  stmt.bind([log_date, disinfection_area, disinfectant, method, manager, notes || '', id]);
+  stmt.step();
+  stmt.free();
+  saveDatabase();
+}
+
+export function deleteDisinfectionLog(id) {
+  const stmt = db.prepare('DELETE FROM disinfection_logs WHERE id = ?');
+  stmt.bind([id]);
+  stmt.step();
+  stmt.free();
+  saveDatabase();
 }
 
 export default db;

@@ -42,7 +42,15 @@ import {
   getCustomerReservations,
   updateReservation,
   deleteReservation,
-  getReservationById
+  getReservationById,
+  createTransportLog,
+  getAllTransportLogs,
+  updateTransportLog,
+  deleteTransportLog,
+  createDisinfectionLog,
+  getAllDisinfectionLogs,
+  updateDisinfectionLog,
+  deleteDisinfectionLog
 } from './database.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -1146,6 +1154,112 @@ app.delete('/api/revenues/:revenueId', (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: '매출 삭제 중 오류가 발생했습니다.' });
+  }
+});
+
+// ─── 운송일지 API ─────────────────────────────────────────────────────────────
+
+app.post('/api/transport-logs', (req, res) => {
+  try {
+    const { log_date, vehicle_number, driver_name, route_type, dogs_info, notes } = req.body;
+    if (!log_date || !vehicle_number || !driver_name || !route_type) {
+      return res.status(400).json({ error: '날짜, 차량번호, 운전자, 구분은 필수입니다.' });
+    }
+    const id = createTransportLog({ log_date, vehicle_number, driver_name, route_type, dogs_info, notes });
+    res.json({ success: true, id, message: '운송일지가 등록되었습니다.' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: '운송일지 등록 중 오류가 발생했습니다.' });
+  }
+});
+
+app.get('/api/transport-logs', (req, res) => {
+  try {
+    const { start_date, end_date } = req.query;
+    const logs = getAllTransportLogs({ start_date, end_date });
+    res.json(logs);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: '운송일지 조회 중 오류가 발생했습니다.' });
+  }
+});
+
+app.put('/api/transport-logs/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { log_date, vehicle_number, driver_name, route_type, dogs_info, notes } = req.body;
+    if (!log_date || !vehicle_number || !driver_name || !route_type) {
+      return res.status(400).json({ error: '날짜, 차량번호, 운전자, 구분은 필수입니다.' });
+    }
+    updateTransportLog(id, { log_date, vehicle_number, driver_name, route_type, dogs_info, notes });
+    res.json({ success: true, message: '운송일지가 수정되었습니다.' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: '운송일지 수정 중 오류가 발생했습니다.' });
+  }
+});
+
+app.delete('/api/transport-logs/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    deleteTransportLog(id);
+    res.json({ success: true, message: '운송일지가 삭제되었습니다.' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: '운송일지 삭제 중 오류가 발생했습니다.' });
+  }
+});
+
+// ─── 소독일지 API ─────────────────────────────────────────────────────────────
+
+app.post('/api/disinfection-logs', (req, res) => {
+  try {
+    const { log_date, disinfection_area, disinfectant, method, manager, notes } = req.body;
+    if (!log_date || !disinfection_area || !disinfectant || !method || !manager) {
+      return res.status(400).json({ error: '날짜, 소독구역, 소독약품, 소독방법, 담당자는 필수입니다.' });
+    }
+    const id = createDisinfectionLog({ log_date, disinfection_area, disinfectant, method, manager, notes });
+    res.json({ success: true, id, message: '소독일지가 등록되었습니다.' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: '소독일지 등록 중 오류가 발생했습니다.' });
+  }
+});
+
+app.get('/api/disinfection-logs', (req, res) => {
+  try {
+    const { start_date, end_date } = req.query;
+    const logs = getAllDisinfectionLogs({ start_date, end_date });
+    res.json(logs);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: '소독일지 조회 중 오류가 발생했습니다.' });
+  }
+});
+
+app.put('/api/disinfection-logs/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { log_date, disinfection_area, disinfectant, method, manager, notes } = req.body;
+    if (!log_date || !disinfection_area || !disinfectant || !method || !manager) {
+      return res.status(400).json({ error: '날짜, 소독구역, 소독약품, 소독방법, 담당자는 필수입니다.' });
+    }
+    updateDisinfectionLog(id, { log_date, disinfection_area, disinfectant, method, manager, notes });
+    res.json({ success: true, message: '소독일지가 수정되었습니다.' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: '소독일지 수정 중 오류가 발생했습니다.' });
+  }
+});
+
+app.delete('/api/disinfection-logs/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    deleteDisinfectionLog(id);
+    res.json({ success: true, message: '소독일지가 삭제되었습니다.' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: '소독일지 삭제 중 오류가 발생했습니다.' });
   }
 });
 
