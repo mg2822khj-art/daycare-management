@@ -1472,6 +1472,19 @@ export function updateTransportLog(id, { log_date, vehicle_number, driver_name, 
   saveDatabase();
 }
 
+export function getTransportDefaults() {
+  try {
+    const vehicles = db.exec(`SELECT DISTINCT vehicle_number FROM transport_logs ORDER BY rowid DESC LIMIT 10`);
+    const drivers = db.exec(`SELECT DISTINCT driver_name FROM transport_logs ORDER BY rowid DESC LIMIT 10`);
+    return {
+      vehicle_numbers: vehicles.length ? vehicles[0].values.map(r => r[0]) : [],
+      driver_names: drivers.length ? drivers[0].values.map(r => r[0]) : [],
+    };
+  } catch {
+    return { vehicle_numbers: [], driver_names: [] };
+  }
+}
+
 export function deleteTransportLog(id) {
   const stmt = db.prepare('DELETE FROM transport_logs WHERE id = ?');
   stmt.bind([id]);

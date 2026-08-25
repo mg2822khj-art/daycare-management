@@ -47,6 +47,7 @@ import {
   getAllTransportLogs,
   updateTransportLog,
   deleteTransportLog,
+  getTransportDefaults,
   createDisinfectionLog,
   getAllDisinfectionLogs,
   updateDisinfectionLog,
@@ -1170,6 +1171,15 @@ app.post('/api/transport-logs', (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: '운송일지 등록 중 오류가 발생했습니다.' });
+  }
+});
+
+app.get('/api/transport-logs/defaults', (req, res) => {
+  try {
+    res.json(getTransportDefaults());
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: '기본값 조회 중 오류가 발생했습니다.' });
   }
 });
 

@@ -12,6 +12,8 @@ function TransportLogTab({ customers }) {
   const [loading, setLoading] = useState(false)
   const [filterStart, setFilterStart] = useState(TODAY.slice(0, 7) + '-01')
   const [filterEnd, setFilterEnd] = useState(TODAY)
+  const [savedVehicles, setSavedVehicles] = useState([])
+  const [savedDrivers, setSavedDrivers] = useState([])
 
   // 폼 상태
   const emptyForm = {
@@ -26,6 +28,16 @@ function TransportLogTab({ customers }) {
   const [editingId, setEditingId] = useState(null)
   const [dogSearch, setDogSearch] = useState('')
   const [alert, setAlert] = useState(null)
+
+  const fetchDefaults = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API_URL}/transport-logs/defaults`)
+      setSavedVehicles(res.data.vehicle_numbers || [])
+      setSavedDrivers(res.data.driver_names || [])
+    } catch {
+      // 무시
+    }
+  }, [])
 
   const showAlert = (msg, type = 'success') => {
     setAlert({ msg, type })
@@ -47,6 +59,7 @@ function TransportLogTab({ customers }) {
   }, [filterStart, filterEnd])
 
   useEffect(() => { fetchLogs() }, [fetchLogs])
+  useEffect(() => { fetchDefaults() }, [fetchDefaults])
 
   const handleDogToggle = (customer) => {
     const key = `${customer.customer_id || customer.id}_${customer.dog_name}`
@@ -96,6 +109,7 @@ function TransportLogTab({ customers }) {
       setEditingId(null)
       setDogSearch('')
       fetchLogs()
+      fetchDefaults()
     } catch (err) {
       showAlert(err.response?.data?.error || '저장 중 오류가 발생했습니다.', 'error')
     }
@@ -179,6 +193,29 @@ function TransportLogTab({ customers }) {
                 placeholder="예: 12가 3456"
                 required
               />
+              {savedVehicles.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                  {savedVehicles.map(v => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => setForm(p => ({ ...p, vehicle_number: v }))}
+                      style={{
+                        padding: '3px 10px',
+                        border: `1.5px solid ${form.vehicle_number === v ? '#667eea' : '#ccc'}`,
+                        borderRadius: 14,
+                        background: form.vehicle_number === v ? '#ede9ff' : 'white',
+                        color: form.vehicle_number === v ? '#667eea' : '#555',
+                        fontSize: '0.8rem',
+                        cursor: 'pointer',
+                        fontWeight: form.vehicle_number === v ? 700 : 400,
+                      }}
+                    >
+                      {v}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="form-group">
               <label>운전자 *</label>
@@ -190,6 +227,29 @@ function TransportLogTab({ customers }) {
                 placeholder="운전자 이름"
                 required
               />
+              {savedDrivers.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                  {savedDrivers.map(d => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setForm(p => ({ ...p, driver_name: d }))}
+                      style={{
+                        padding: '3px 10px',
+                        border: `1.5px solid ${form.driver_name === d ? '#667eea' : '#ccc'}`,
+                        borderRadius: 14,
+                        background: form.driver_name === d ? '#ede9ff' : 'white',
+                        color: form.driver_name === d ? '#667eea' : '#555',
+                        fontSize: '0.8rem',
+                        cursor: 'pointer',
+                        fontWeight: form.driver_name === d ? 700 : 400,
+                      }}
+                    >
+                      {d}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
